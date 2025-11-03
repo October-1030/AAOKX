@@ -188,13 +188,32 @@ export class HyperliquidClient {
     try {
       const isBuy = side === 'LONG';
 
-      const order = await this.client.exchange.marketOrder(
-        symbol,
-        isBuy,
-        size,
-        null, // slippage (null = market order)
-        reduceOnly
-      );
+      // 获取当前市场价格
+      console.log(`[Hyperliquid] 📡 获取 ${coin} 市场价格...`);
+      const currentPrice = await this.getMarketPrice(coin);
+
+      if (!currentPrice || currentPrice === 0) {
+        throw new Error(`无法获取 ${coin} 的市场价格`);
+      }
+
+      console.log(`[Hyperliquid] 💰 ${coin} 当前价格: $${currentPrice.toFixed(2)}`);
+
+      // 设置一个有利的价格（买入时略高，卖出时略低），确保成交
+      const slippage = 0.01; // 1% 滑点
+      const limitPrice = isBuy
+        ? currentPrice * (1 + slippage)  // 买入价略高
+        : currentPrice * (1 - slippage); // 卖出价略低
+
+      console.log(`[Hyperliquid] 🎯 下单价格: $${limitPrice.toFixed(2)} (${isBuy ? '买入' : '卖出'}, 含 1% 滑点)`);
+
+      const order = await this.client.exchange.placeOrder({
+        coin: symbol,
+        is_buy: isBuy,
+        sz: size,
+        limit_px: limitPrice.toFixed(2),
+        order_type: { limit: { tif: 'Ioc' } }, // IoC = Immediate or Cancel (市价单)
+        reduce_only: reduceOnly,
+      });
 
       console.log('[Hyperliquid] ✅ 订单已提交:', order);
       return order;
@@ -329,11 +348,12 @@ export class HyperliquidClient {
     }
 
     const symbol = COIN_TO_SYMBOL[coin];
-    console.log(`[Hyperliquid] ⚙️ 设置杠杆: ${symbol} ${leverage}x`);
+    console.log(`[Hyperliquid] ⚙️ 设置杠杆: ${symbol} ${leverage}x (cross)`);
 
     try {
-      await this.client.exchange.updateLeverage(symbol, leverage, false);
-      console.log(`[Hyperliquid] ✅ ${symbol} 杠杆已设置为 ${leverage}x`);
+      // leverageMode: "cross" for cross leverage, "isolated" for isolated leverage
+      await this.client.exchange.updateLeverage(symbol, "cross", leverage);
+      console.log(`[Hyperliquid] ✅ ${symbol} 杠杆已设置为 ${leverage}x (cross)`);
     } catch (error) {
       console.error(`[Hyperliquid] ❌ 设置杠杆失败:`, error);
       throw error;

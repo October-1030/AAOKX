@@ -311,62 +311,15 @@ function generateGrokResponse(btcPrice: number): string {
 /**
  * AI模型配置
  *
- * 🎮 演示模式：使用模拟AI响应（不需要API密钥）
- * 💡 如需使用真实API，请配置对应的API密钥
+ * 💡 只使用 DeepSeek 真实 API
+ * 其他模型已禁用
  */
 export const AI_MODELS: AIModel[] = [
   {
     name: 'deepseek-v3',
     displayName: 'DeepSeek V3.1',
-    provider: 'Simulated',
+    provider: 'DeepSeek',
     strategy: 'Conservative value investing with multi-period technical analysis',
-    callAPI: async (systemPrompt, userPrompt) => {
-      return simulateAIResponse('deepseek-v3', systemPrompt, userPrompt);
-    },
-  },
-  {
-    name: 'claude-4.5',
-    displayName: 'Claude 4.5 Sonnet',
-    provider: 'Simulated',
-    strategy: 'Conservative value investing with strict risk controls',
-    callAPI: async (systemPrompt, userPrompt) => {
-      return simulateAIResponse('claude-4.5', systemPrompt, userPrompt);
-    },
-  },
-  {
-    name: 'gpt-5',
-    displayName: 'GPT-5',
-    provider: 'Simulated',
-    strategy: 'Balanced multi-asset strategy with momentum trading',
-    callAPI: async (systemPrompt, userPrompt) => {
-      return simulateAIResponse('gpt-5', systemPrompt, userPrompt);
-    },
-  },
-  {
-    name: 'gemini-2.5',
-    displayName: 'Gemini 2.5 Pro',
-    provider: 'Simulated',
-    strategy: 'Aggressive momentum trading with high leverage',
-    callAPI: async (systemPrompt, userPrompt) => {
-      return simulateAIResponse('gemini-2.5', systemPrompt, userPrompt);
-    },
-  },
-  {
-    name: 'qwen-3',
-    displayName: 'Qwen 3 Max',
-    provider: 'Simulated',
-    strategy: 'Quantitative analysis with altcoin focus',
-    callAPI: async (systemPrompt, userPrompt) => {
-      return simulateAIResponse('qwen-3', systemPrompt, userPrompt);
-    },
-  },
-  {
-    name: 'grok-4',
-    displayName: 'Grok 4',
-    provider: 'Simulated',
-    strategy: 'Contrarian trading with volatility analysis',
-    callAPI: async (systemPrompt, userPrompt) => {
-      return simulateAIResponse('grok-4', systemPrompt, userPrompt);
-    },
+    callAPI: callDeepSeek,  // ✅ 使用真实的 DeepSeek API
   },
 ];

@@ -13,7 +13,7 @@ export const CONFIG = {
 
   // 是否使用真实交易（Hyperliquid）
   // ⚠️ 警告：设置为 true 将执行真实订单！
-  USE_REAL_TRADING: false, // 🔒 默认禁用真实交易（安全模式）
+  USE_REAL_TRADING: true, // ✅ 启用测试网真实交易
 
   // 交易周期间隔（毫秒）
   TRADING_INTERVAL_MS: 180000, // 3分钟

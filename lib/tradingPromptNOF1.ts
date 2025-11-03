@@ -186,24 +186,33 @@ Use conversational, thinking-out-loud style like:
 
 ## Part 2: TRADING_DECISIONS
 
-Provide structured decisions in this format:
+**IMPORTANT**: Provide your decisions in JSON format wrapped in triple-backtick json code block.
 
-[COIN_SYMBOL]
-- Action: HOLD | BUY | SELL
-- Confidence: XX%
-- Quantity: +/- [number] (positive for LONG, negative for SHORT)
+Format example:
+""" (use backticks instead of quotes)
+json
+{
+  "decisions": [
+    {
+      "coin": "BTC",
+      "action": "HOLD",
+      "confidence": 75,
+      "side": "LONG",
+      "leverage": 15,
+      "notional": 2500,
+      "quantity": 0.05,
+      "exitPlan": {
+        "invalidation": "Price drops below $105000",
+        "stopLoss": 105000,
+        "takeProfit": 110000
+      }
+    }
+  ]
+}
+"""
 
-Example:
-SOL
-- Action: HOLD
-- Confidence: 75%
-- Quantity: -50
-
-BTC
-- Action: BUY
-- Confidence: 80%
-- Quantity: +0.05
-
+**Action values**: "HOLD" (keep position), "BUY" (open new position), "SELL" (close position)
+**Side values**: "LONG" (bullish) or "SHORT" (bearish)
 **CRITICAL**: Be consistent with your Chain of Thought analysis.
 `;
 }
@@ -231,20 +240,30 @@ export function parseNOF1Response(response: string): {
   chainOfThought: string;
   decisions: TradingDecision[];
 } {
-  // 🔍 方案1：尝试解析 JSON 格式（用于模拟响应）
-  const jsonMatch = response.match(/```json\s*(\{[\s\S]*?\})\s*```/);
-  if (jsonMatch) {
-    try {
-      const parsed = JSON.parse(jsonMatch[1]);
-      if (parsed.decisions && Array.isArray(parsed.decisions)) {
-        const chainOfThought = response.split('```json')[0].trim();
-        return {
-          chainOfThought,
-          decisions: parsed.decisions,
-        };
+  // 🔍 方案1：尝试解析 JSON 格式（支持多种代码块格式）
+  const jsonPatterns = [
+    /```json\s*(\{[\s\S]*?\})\s*```/,           // ```json { } ```
+    /```\s*(\{[\s\S]*?"decisions"[\s\S]*?\})\s*```/, // ``` { "decisions": [...] } ```
+    /\{[\s\S]*?"decisions"\s*:\s*\[[\s\S]*?\]\s*\}/,  // Direct JSON object
+  ];
+
+  for (const pattern of jsonPatterns) {
+    const jsonMatch = response.match(pattern);
+    if (jsonMatch) {
+      try {
+        const jsonStr = jsonMatch[1] || jsonMatch[0];
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.decisions && Array.isArray(parsed.decisions)) {
+          const chainOfThought = response.split(/```(?:json)?/)[0].trim();
+          console.log(`[parseNOF1Response] ✅ JSON 解析成功，找到 ${parsed.decisions.length} 个决策`);
+          return {
+            chainOfThought,
+            decisions: parsed.decisions,
+          };
+        }
+      } catch (error) {
+        console.warn('[parseNOF1Response] JSON 解析失败，尝试下一个模式:', error);
       }
-    } catch (error) {
-      console.warn('[parseNOF1Response] JSON 解析失败，尝试文本格式:', error);
     }
   }
 

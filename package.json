@@ -1,0 +1,38 @@
+{
+  "name": "alpha-arena-clone",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@types/numeral": "^2.0.5",
+    "autoprefixer": "^10.4.20",
+    "axios": "^1.7.9",
+    "date-fns": "^4.1.0",
+    "dotenv": "^17.2.3",
+    "hyperliquid": "^1.7.7",
+    "next": "^15.1.6",
+    "numeral": "^2.0.6",
+    "postcss": "^8.4.49",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "recharts": "^2.15.0",
+    "swr": "^2.3.6",
+    "tailwindcss": "^3.4.1",
+    "ws": "^8.18.0",
+    "zustand": "^5.0.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/react": "^19.0.6",
+    "@types/react-dom": "^19.0.2",
+    "@types/ws": "^8.5.13",
+    "eslint": "^9.18.0",
+    "eslint-config-next": "^15.1.6",
+    "typescript": "^5.7.2"
+  }
+}

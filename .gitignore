@@ -34,8 +34,11 @@ trading-execution.log
 trading-test.log
 *.log
 
-# documentation with sensitive info
+# documentation with sensitive info (contains real wallet addresses/keys)
 DEEPSEEK_INTEGRATION_COMPLETE.md
+真实交易安全配置指南.md
+测试网完整测试流程.md
+快速验证清单.md
 
 # vercel
 .vercel

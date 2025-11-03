@@ -34,6 +34,9 @@ trading-execution.log
 trading-test.log
 *.log
 
+# documentation with sensitive info
+DEEPSEEK_INTEGRATION_COMPLETE.md
+
 # vercel
 .vercel
 

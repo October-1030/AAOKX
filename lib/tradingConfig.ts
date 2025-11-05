@@ -79,7 +79,7 @@ export function calculateTradingLimits(balance: number): TradingLimits {
     console.log('[TradingConfig] 💎 标准模式');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.25, 2000),
+      maxPositionSize: Math.min(balance * 0.25, 2000), // 先用25%，等订单能成功后再调整
       maxPositionPercent: 25,
       maxLeverage: 20, // ✅ 修复：匹配 nof1.ai 系统提示词（10x-20x）
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],

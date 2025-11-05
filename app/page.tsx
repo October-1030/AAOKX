@@ -8,9 +8,12 @@ import ModelChat from '@/components/ModelChat';
 import ThemeToggle from '@/components/ThemeToggle';
 import { useTradingStore } from '@/store/useTradingStore';
 import { fetcher } from '@/lib/fetcher';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function Home() {
+  // 本地状态（用于按钮加载状态）
+  const [isExecuting, setIsExecuting] = useState(false);
+
   // 使用 Zustand 状态
   const {
     performances,
@@ -74,6 +77,7 @@ export default function Home() {
 
   // 手动执行一次交易周期
   const executeCycle = async () => {
+    setIsExecuting(true);
     try {
       const res = await fetch('/api/trading', {
         method: 'POST',
@@ -88,6 +92,8 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Failed to execute cycle:', error);
+    } finally {
+      setIsExecuting(false);
     }
   };
 
@@ -155,9 +161,14 @@ export default function Home() {
 
               <button
                 onClick={executeCycle}
-                className="bg-blue-600 hover:bg-blue-700 text-white font-semibold px-6 py-2 rounded-lg transition-colors"
+                disabled={isExecuting}
+                className={`${
+                  isExecuting
+                    ? 'bg-blue-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                } text-white font-semibold px-6 py-2 rounded-lg transition-colors`}
               >
-                Execute Cycle
+                {isExecuting ? 'Executing...' : 'Execute Cycle'}
               </button>
             </div>
           </div>

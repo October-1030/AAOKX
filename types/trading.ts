@@ -176,3 +176,135 @@ export interface TransparencyExport {
     timeRange: { start: number; end: number };
   };
 }
+
+// ============================================
+// nof1.ai API 数据结构（完全匹配）
+// ============================================
+
+/**
+ * /api/crypto-prices 响应格式
+ */
+export interface CryptoPricesResponse {
+  prices: {
+    [symbol: string]: {
+      symbol: string;
+      price: number;
+      timestamp: number;
+    };
+  };
+  serverTime: number;
+}
+
+/**
+ * /api/trades 响应格式 - 单个交易记录
+ */
+export interface TradeRecord {
+  id: string;                          // model_id + UUID
+  trade_id: string;                    // 复合ID（包含时间戳和币种）
+  symbol: string;                      // 交易对（XRP, SOL, ETH, BTC, DOGE, BNB）
+  side: 'long' | 'short';
+  trade_type: 'long' | 'short';
+  model_id: string;                    // 模型ID
+  quantity: number;                    // 交易数量（负数表示空头）
+  entry_price: number;
+  exit_price: number;
+  entry_sz: number;
+  exit_sz: number;
+  entry_time: number;                  // Unix 时间戳
+  exit_time: number;
+  entry_human_time: string;
+  exit_human_time: string;
+  entry_oid: number;
+  exit_oid: number;
+  entry_tid: number;
+  exit_tid: number;
+  entry_crossed: boolean;
+  exit_crossed: boolean;
+  leverage: number;
+  confidence: number;
+  entry_commission_dollars: number;
+  exit_commission_dollars: number;
+  total_commission_dollars: number;
+  entry_closed_pnl: number;
+  exit_closed_pnl: number;
+  realized_gross_pnl: number;          // 税前收益
+  realized_net_pnl: number;            // 税后收益
+  entry_liquidation: null | any;
+  exit_liquidation: null | any;
+  exit_plan: {
+    profit_target?: number;
+    stop_loss?: number;
+    invalidation_condition?: string;
+  };
+}
+
+/**
+ * /api/trades 响应格式
+ */
+export interface TradesResponse {
+  trades: TradeRecord[];
+}
+
+/**
+ * /api/account-totals 响应格式 - 单个账户快照
+ */
+export interface AccountSnapshot {
+  id: string;
+  timestamp: number;
+  realized_pnl: number;
+  positions: {
+    [symbol: string]: {
+      entry_oid: number;
+      risk_usd: number;
+      confidence: number;
+      index_col: null | number;
+      exit_plan: {
+        profit_target: number;
+        stop_loss: number;
+        invalidation_condition: string;
+      };
+      entry_time: number;
+      symbol: string;
+      entry_price: number;
+      tp_oid: number;
+      margin: number;
+      wait_for_fill: boolean;
+      sl_oid: number;
+      oid: number;
+      current_price: number;
+      closed_pnl: number;
+      liquidation_price: number;
+      commission: number;
+      leverage: number;
+      slippage: number;
+      quantity: number;
+      unrealized_pnl: number;
+    };
+  };
+  since_inception_minute_marker: number;
+  sharpe_ratio: number | null;
+  cum_pnl_pct: number;                    // 累计收益百分比
+  total_unrealized_pnl: number;
+  model_id: string;
+  since_inception_hourly_marker: number;
+  dollar_equity: number;                   // 账户总价值
+}
+
+/**
+ * /api/account-totals 响应格式
+ */
+export interface AccountTotalsResponse {
+  accountTotals: AccountSnapshot[];
+}
+
+/**
+ * /api/since-inception-values 响应格式
+ */
+export interface SinceInceptionValuesResponse {
+  values: {
+    [model_id: string]: {
+      timestamp: number;
+      equity: number;
+    }[];
+  };
+}

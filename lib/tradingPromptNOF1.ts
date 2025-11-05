@@ -31,6 +31,12 @@ Timeframes note: Unless stated otherwise in a section title, intraday series are
   for (const market of marketData) {
     const { coin, current, intraday } = market;
 
+    // ✅ 跳过没有价格数据的币种（如 XRP 在测试网上不可用）
+    if (!current.price || current.price === 0) {
+      console.log(`[PromptGen] ⚠️ 跳过 ${coin}（价格不可用）`);
+      continue;
+    }
+
     prompt += `=== ALL ${coin} DATA ===
 current_price = ${current.price.toFixed(2)}, current_ema20 = ${current.ema_20.toFixed(2)}, current_macd = ${current.macd.toFixed(4)}, current_rsi (7 period) = ${current.rsi_7.toFixed(2)}
 
@@ -153,6 +159,8 @@ ${strategy || 'Conservative value investing with focus on risk-adjusted returns'
    - Maximum 1-2 positions per coin
    - No single trade should risk more than 5% of total equity
    - Diversify across multiple assets
+   - **MANDATORY STOP LOSS**: If any position loses more than 30% (ROE), IMMEDIATELY close it with action "SELL"
+   - **PROFIT TAKING**: If any position gains more than 100% (ROE), consider taking profits
 
 5. **Technical Discipline:**
    - Only enter when RSI < 30 (oversold) for LONG or RSI > 70 (overbought) for SHORT

@@ -82,9 +82,10 @@ export class HyperliquidClient {
       console.log('[Hyperliquid] 🔍 完整账户状态:', JSON.stringify(accountState, null, 2));
 
       // 尝试多种可能的字段名
-      const marginUsed = accountState.marginUsed || accountState.margin_used || accountState.marginSummary?.accountValue || 0;
-      const withdrawable = accountState.withdrawable || accountState.withdrawable || 0;
-      const accountValue = accountState.accountValue || accountState.account_value || accountState.marginSummary?.totalMarginUsed || withdrawable;
+      // ✅ 修复：accountValue 应该优先使用 marginSummary.accountValue
+      const withdrawable = accountState.withdrawable || 0;
+      const accountValue = accountState.marginSummary?.accountValue || accountState.accountValue || accountState.account_value || withdrawable;
+      const marginUsed = accountState.marginUsed || accountState.margin_used || (accountValue - withdrawable) || 0;
 
       console.log('[Hyperliquid] 📊 解析后的账户状态:', {
         marginUsed,
@@ -206,10 +207,32 @@ export class HyperliquidClient {
 
       console.log(`[Hyperliquid] 🎯 下单价格: $${limitPrice.toFixed(2)} (${isBuy ? '买入' : '卖出'}, 含 1% 滑点)`);
 
+      // 🔥 关键修复：将美元金额转换为币的数量
+      // size 是美元金额（如 $669.36）
+      // Hyperliquid需要的是币的数量（如 4111 DOGE）
+      let coinQuantity = size / currentPrice;
+
+      // 🔥 修复精度问题：Hyperliquid对不同币种有不同的精度要求（从API查询的真实值）
+      // 根据币种设置合适的小数位数，避免 "floatToWire causes rounding" 错误
+      const precisionMap: Record<string, number> = {
+        'BTC': 5,   // BTC: 5位小数（API返回）
+        'ETH': 4,   // ETH: 4位小数（API返回）
+        'SOL': 2,   // SOL: 2位小数（API返回）
+        'BNB': 3,   // BNB: 3位小数（API返回）
+        'DOGE': 0,  // DOGE: 整数（API返回）
+        'XRP': 0,   // XRP: 整数（暂无测试网数据，估计值）
+      };
+
+      console.log(`[Hyperliquid] 🔍 调试: coin="${coin}", symbol="${symbol}"`);
+      const precision = precisionMap[coin] || 5;
+      coinQuantity = Number(coinQuantity.toFixed(precision));
+
+      console.log(`[Hyperliquid] 💵 订单金额: $${size.toFixed(2)} → ${coinQuantity} ${coin} (精度: ${precision}位)`);
+
       const order = await this.client.exchange.placeOrder({
         coin: symbol,
         is_buy: isBuy,
-        sz: size,
+        sz: coinQuantity,
         limit_px: limitPrice.toFixed(2),
         order_type: { limit: { tif: 'Ioc' } }, // IoC = Immediate or Cancel (市价单)
         reduce_only: reduceOnly,

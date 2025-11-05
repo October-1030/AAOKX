@@ -13,6 +13,13 @@ let updateInterval: NodeJS.Timeout | null = null;
 let marketDataInitialized = false;
 
 /**
+ * 获取全局交易引擎实例（供其他 API 端点使用）
+ */
+export function getTradingEngine(): TradingEngineState | null {
+  return tradingEngine;
+}
+
+/**
  * 获取市场数据（使用 CoinGecko 现货价格）
  */
 async function getMarketData() {
@@ -159,6 +166,9 @@ export async function POST(request: Request) {
           console.log('\n========================================');
           console.log('🚀 开始执行交易周期');
           console.log('========================================\n');
+
+          // 🔥 确保市场数据已初始化
+          await getMarketData();
 
           // 手动触发一次交易周期
           await updateMarketDataWrapper();

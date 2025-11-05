@@ -222,7 +222,7 @@ export class TradingEngineState {
    * 执行模拟交易决策（仅记录）
    */
   private executeSimulatedDecision(state: ModelState, decision: TradingDecision) {
-    const { account, completedTrades } = state;
+    const { account, completedTrades, model } = state;
 
     switch (decision.action) {
       case 'BUY':
@@ -230,12 +230,12 @@ export class TradingEngineState {
         break;
 
       case 'SELL':
-        this.executeSell(account, completedTrades, decision);
+        this.executeSell(account, completedTrades, decision, model.displayName);
         break;
 
       case 'HOLD':
         // 检查是否需要触发止损/止盈
-        this.checkExitConditions(account, completedTrades, decision.coin);
+        this.checkExitConditions(account, completedTrades, model.displayName, decision.coin);
         break;
     }
   }
@@ -299,7 +299,8 @@ export class TradingEngineState {
   private executeSell(
     account: AccountStatus,
     completedTrades: CompletedTrade[],
-    decision: TradingDecision
+    decision: TradingDecision,
+    modelName: string
   ) {
     const positionIndex = account.positions.findIndex(p => p.coin === decision.coin);
     if (positionIndex === -1) return;
@@ -307,7 +308,7 @@ export class TradingEngineState {
     const position = account.positions[positionIndex];
     const currentPrice = getCurrentPrice(decision.coin);
 
-    this.closePosition(account, completedTrades, position, currentPrice, 'Manual close');
+    this.closePosition(account, completedTrades, position, currentPrice, 'Manual close', modelName);
   }
 
   /**
@@ -316,6 +317,7 @@ export class TradingEngineState {
   private checkExitConditions(
     account: AccountStatus,
     completedTrades: CompletedTrade[],
+    modelName: string,
     coin?: Coin
   ) {
     const positionsToCheck = coin
@@ -327,23 +329,23 @@ export class TradingEngineState {
 
       // 检查止损
       if (position.side === 'LONG' && currentPrice <= position.exitPlan.stopLoss) {
-        this.closePosition(account, completedTrades, position, currentPrice, 'Stop loss triggered');
+        this.closePosition(account, completedTrades, position, currentPrice, 'Stop loss triggered', modelName);
         continue;
       }
 
       if (position.side === 'SHORT' && currentPrice >= position.exitPlan.stopLoss) {
-        this.closePosition(account, completedTrades, position, currentPrice, 'Stop loss triggered');
+        this.closePosition(account, completedTrades, position, currentPrice, 'Stop loss triggered', modelName);
         continue;
       }
 
       // 检查止盈
       if (position.side === 'LONG' && currentPrice >= position.exitPlan.takeProfit) {
-        this.closePosition(account, completedTrades, position, currentPrice, 'Take profit hit');
+        this.closePosition(account, completedTrades, position, currentPrice, 'Take profit hit', modelName);
         continue;
       }
 
       if (position.side === 'SHORT' && currentPrice <= position.exitPlan.takeProfit) {
-        this.closePosition(account, completedTrades, position, currentPrice, 'Take profit hit');
+        this.closePosition(account, completedTrades, position, currentPrice, 'Take profit hit', modelName);
       }
     }
   }
@@ -356,7 +358,8 @@ export class TradingEngineState {
     completedTrades: CompletedTrade[],
     position: Position,
     exitPrice: number,
-    exitReason: string
+    exitReason: string,
+    modelName: string = ''
   ) {
     const pnl = this.calculatePositionPnL(position, exitPrice);
     const requiredMargin = position.notional / position.leverage;
@@ -368,7 +371,7 @@ export class TradingEngineState {
     // 记录完成的交易
     const completedTrade: CompletedTrade = {
       id: position.id,
-      modelName: '',
+      modelName: modelName,  // ✅ 使用传入的模型名称
       coin: position.coin,
       side: position.side,
       entryPrice: position.entryPrice,
@@ -472,6 +475,51 @@ export class TradingEngineState {
 
     // 按回报率排序
     return performances.sort((a, b) => b.returnPercent - a.returnPercent);
+  }
+
+  /**
+   * 获取所有完成的交易（用于 /api/trades）
+   */
+  getAllCompletedTrades(): CompletedTrade[] {
+    const allTrades: CompletedTrade[] = [];
+
+    for (const [modelName, state] of this.modelStates) {
+      // 添加模型名称并收集所有交易
+      const tradesWithModel = state.completedTrades.map(trade => ({
+        ...trade,
+        modelName: state.model.displayName,
+      }));
+      allTrades.push(...tradesWithModel);
+    }
+
+    // 按时间倒序排序（最新的在前面）
+    return allTrades.sort((a, b) => b.closedAt - a.closedAt);
+  }
+
+  /**
+   * 获取所有账户快照（用于 /api/account-totals）
+   */
+  getAllAccountSnapshots() {
+    const snapshots = [];
+
+    for (const [modelName, state] of this.modelStates) {
+      const { model, account, completedTrades, equityHistory } = state;
+
+      snapshots.push({
+        model_id: model.name,
+        displayName: model.displayName,
+        timestamp: Date.now(),
+        dollar_equity: account.totalEquity,
+        realized_pnl: completedTrades.reduce((sum, t) => sum + t.pnl, 0),
+        total_unrealized_pnl: account.positions.reduce((sum, p) => sum + p.unrealizedPnL, 0),
+        cum_pnl_pct: account.totalReturn,
+        sharpe_ratio: this.calculateSharpeRatio(equityHistory),
+        positions: account.positions,
+        equityHistory: equityHistory.slice(-100),
+      });
+    }
+
+    return snapshots;
   }
 
   /**

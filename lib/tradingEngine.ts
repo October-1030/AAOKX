@@ -8,6 +8,8 @@ import {
   ModelPerformance,
   AIResponse,
   CompletedTrade,
+  TradeSide,
+  TradeAction,
 } from '@/types/trading';
 import { getCurrentPrice, getAllMarketData } from './marketData';
 import {
@@ -22,6 +24,95 @@ import { getRealTradingExecutor } from './realTradingExecutor';
 const INITIAL_CAPITAL = 10000;
 const MAKER_FEE = -0.0002; // 返佣
 const TAKER_FEE = 0.00055;
+
+/**
+ * 根据 confidence 计算动态杠杆（nof1.ai 规则）
+ * @param confidence 信心度 (0-1)
+ * @returns 建议杠杆倍数 (1-20x)
+ */
+function calculateDynamicLeverage(confidence: number): number {
+  if (confidence < 0.3) return 1; // 极低信心，最小杠杆
+  if (confidence < 0.5) return Math.floor(1 + (confidence - 0.3) * 10); // 0.3-0.5 → 1-3x
+  if (confidence < 0.7) return Math.floor(3 + (confidence - 0.5) * 25); // 0.5-0.7 → 3-8x
+  return Math.floor(8 + (confidence - 0.7) * 40); // 0.7-1.0 → 8-20x
+}
+
+/**
+ * 验证交易决策的合理性（借鉴 LLM-trader-test）
+ * @param decision 交易决策
+ * @param currentPrice 当前价格
+ * @param side 交易方向
+ * @returns 验证结果
+ */
+function validateTradingDecision(
+  decision: TradingDecision,
+  currentPrice: number,
+  side: TradeSide
+): { valid: boolean; reason?: string } {
+  const { exitPlan } = decision;
+
+  // 验证 1: 止损方向检查
+  if (side === 'LONG' && exitPlan.stopLoss >= currentPrice) {
+    return {
+      valid: false,
+      reason: `LONG stop-loss ($${exitPlan.stopLoss.toFixed(2)}) must be < entry ($${currentPrice.toFixed(2)})`
+    };
+  }
+
+  if (side === 'SHORT' && exitPlan.stopLoss <= currentPrice) {
+    return {
+      valid: false,
+      reason: `SHORT stop-loss ($${exitPlan.stopLoss.toFixed(2)}) must be > entry ($${currentPrice.toFixed(2)})`
+    };
+  }
+
+  // 验证 2: 止盈方向检查
+  if (side === 'LONG' && exitPlan.takeProfit <= currentPrice) {
+    return {
+      valid: false,
+      reason: `LONG take-profit ($${exitPlan.takeProfit.toFixed(2)}) must be > entry ($${currentPrice.toFixed(2)})`
+    };
+  }
+
+  if (side === 'SHORT' && exitPlan.takeProfit >= currentPrice) {
+    return {
+      valid: false,
+      reason: `SHORT take-profit ($${exitPlan.takeProfit.toFixed(2)}) must be < entry ($${currentPrice.toFixed(2)})`
+    };
+  }
+
+  // 验证 3: 2:1 盈亏比检查（nof1.ai 强制规则）
+  const riskDistance = Math.abs(currentPrice - exitPlan.stopLoss);
+  const rewardDistance = Math.abs(exitPlan.takeProfit - currentPrice);
+  const riskRewardRatio = rewardDistance / riskDistance;
+
+  if (riskRewardRatio < 2.0) {
+    return {
+      valid: false,
+      reason: `Risk-reward ratio ${riskRewardRatio.toFixed(2)}:1 < required 2:1 (risk: $${riskDistance.toFixed(2)}, reward: $${rewardDistance.toFixed(2)})`
+    };
+  }
+
+  // 验证 4: 价格合理性（止损/止盈不能太远）
+  const stopLossPercent = Math.abs((exitPlan.stopLoss - currentPrice) / currentPrice) * 100;
+  const takeProfitPercent = Math.abs((exitPlan.takeProfit - currentPrice) / currentPrice) * 100;
+
+  if (stopLossPercent > 50) {
+    return {
+      valid: false,
+      reason: `Stop-loss too far (${stopLossPercent.toFixed(1)}% from entry)`
+    };
+  }
+
+  if (takeProfitPercent > 100) {
+    return {
+      valid: false,
+      reason: `Take-profit too far (${takeProfitPercent.toFixed(1)}% from entry)`
+    };
+  }
+
+  return { valid: true };
+}
 
 /**
  * 交易引擎状态
@@ -110,18 +201,28 @@ export class TradingEngineState {
       timestamp: Date.now(),
     };
 
-    // 📊 日志：显示 AI 决策摘要
-    const buyDecisions = decisions.filter(d => d.action === 'BUY');
-    const sellDecisions = decisions.filter(d => d.action === 'SELL');
-    const holdDecisions = decisions.filter(d => d.action === 'HOLD');
+    // 📊 日志：显示 AI 决策摘要（nof1.ai 格式）
+    const buyToEnterDecisions = decisions.filter(d => d.action === 'buy_to_enter');
+    const sellToEnterDecisions = decisions.filter(d => d.action === 'sell_to_enter');
+    const closeDecisions = decisions.filter(d => d.action === 'close');
+    const holdDecisions = decisions.filter(d => d.action === 'hold');
 
-    console.log(`[TradingEngine] 🤖 ${model.displayName} 决策: BUY=${buyDecisions.length}, SELL=${sellDecisions.length}, HOLD=${holdDecisions.length}`);
+    console.log(`[TradingEngine] 🤖 ${model.displayName} 决策: buy_to_enter=${buyToEnterDecisions.length}, sell_to_enter=${sellToEnterDecisions.length}, close=${closeDecisions.length}, hold=${holdDecisions.length}`);
 
-    if (buyDecisions.length > 0) {
-      buyDecisions.forEach(d => console.log(`  📈 BUY ${d.coin} ${d.side} ${d.leverage}x $${d.notional}`));
+    if (buyToEnterDecisions.length > 0) {
+      buyToEnterDecisions.forEach(d => {
+        const leverage = d.leverage || calculateDynamicLeverage(d.confidence);
+        console.log(`  📈 buy_to_enter ${d.coin} LONG ${leverage}x $${d.notional} (conf: ${d.confidence.toFixed(2)})`);
+      });
     }
-    if (sellDecisions.length > 0) {
-      sellDecisions.forEach(d => console.log(`  📉 SELL ${d.coin}`));
+    if (sellToEnterDecisions.length > 0) {
+      sellToEnterDecisions.forEach(d => {
+        const leverage = d.leverage || calculateDynamicLeverage(d.confidence);
+        console.log(`  📉 sell_to_enter ${d.coin} SHORT ${leverage}x $${d.notional} (conf: ${d.confidence.toFixed(2)})`);
+      });
+    }
+    if (closeDecisions.length > 0) {
+      closeDecisions.forEach(d => console.log(`  🔒 close ${d.coin}`));
     }
 
     // 执行交易决策
@@ -150,37 +251,9 @@ export class TradingEngineState {
   }
 
   /**
-   * 转换 AI 决策格式 → RealExecutor 格式
+   * @deprecated 不再需要格式转换，realTradingExecutor 现在直接支持 nof1.ai 格式
+   * 保留此注释以记录历史
    */
-  private convertToRealTradingFormat(decision: TradingDecision): TradingDecision {
-    // BUY → OPEN_LONG / OPEN_SHORT
-    if (decision.action === 'BUY') {
-      // 🔥 关键修复：计算 size（从 notional 转换）
-      let size = decision.size;
-      if (!size && decision.notional) {
-        const currentPrice = getCurrentPrice(decision.coin);
-        size = decision.notional / currentPrice;
-        console.log(`[TradingEngine] 🔄 计算 size: $${decision.notional} / $${currentPrice.toFixed(2)} = ${size.toFixed(6)} ${decision.coin}`);
-      }
-
-      return {
-        ...decision,
-        action: decision.side === 'LONG' ? 'OPEN_LONG' : 'OPEN_SHORT',
-        size, // ✅ 添加 size 参数
-      } as TradingDecision;
-    }
-
-    // SELL → CLOSE_POSITION
-    if (decision.action === 'SELL') {
-      return {
-        ...decision,
-        action: 'CLOSE_POSITION',
-      } as TradingDecision;
-    }
-
-    // HOLD → HOLD (不变)
-    return decision;
-  }
 
   /**
    * 执行单个交易决策
@@ -194,12 +267,10 @@ export class TradingEngineState {
       const realExecutor = getRealTradingExecutor({ dryRun: false });
 
       try {
-        // 🔄 转换 AI 决策格式 → RealExecutor 格式
-        const realDecision = this.convertToRealTradingFormat(decision);
-
+        // ✅ 直接使用 nof1.ai 格式（realTradingExecutor 已支持）
         const result = await realExecutor.executeDecision(
           model.displayName,
-          realDecision,
+          decision,
           account.positions
         );
 
@@ -219,37 +290,77 @@ export class TradingEngineState {
   }
 
   /**
-   * 执行模拟交易决策（仅记录）
+   * 执行模拟交易决策（基于 nof1.ai 真实规则）
    */
   private executeSimulatedDecision(state: ModelState, decision: TradingDecision) {
     const { account, completedTrades, model } = state;
 
+    // 🔍 检查当前是否已有该币种的持仓
+    const existingPosition = account.positions.find(p => p.coin === decision.coin);
+
     switch (decision.action) {
-      case 'BUY':
-        this.executeBuy(account, decision);
+      case 'buy_to_enter':
+        // ❌ NO PYRAMIDING: 如果已有该币种持仓，禁止再次买入
+        if (existingPosition) {
+          console.log(`[${model.displayName}] ❌ PYRAMIDING BLOCKED: ${decision.coin} already has position`);
+          return;
+        }
+        // 买入做多（LONG）
+        this.executeBuy(account, decision, 'LONG');
         break;
 
-      case 'SELL':
+      case 'sell_to_enter':
+        // ❌ NO PYRAMIDING: 如果已有该币种持仓，禁止再次卖出
+        if (existingPosition) {
+          console.log(`[${model.displayName}] ❌ PYRAMIDING BLOCKED: ${decision.coin} already has position`);
+          return;
+        }
+        // 卖出做空（SHORT）
+        this.executeBuy(account, decision, 'SHORT');
+        break;
+
+      case 'close':
+        // 平仓（100% 退出）
+        if (!existingPosition) {
+          console.log(`[${model.displayName}] ⚠️ No position to close for ${decision.coin}`);
+          return;
+        }
         this.executeSell(account, completedTrades, decision, model.displayName);
         break;
 
-      case 'HOLD':
-        // 检查是否需要触发止损/止盈
-        this.checkExitConditions(account, completedTrades, model.displayName, decision.coin);
+      case 'hold':
+        // 持有或保持空仓，检查止损/止盈条件
+        if (existingPosition) {
+          this.checkExitConditions(account, completedTrades, model.displayName, decision.coin);
+        }
         break;
+
+      default:
+        console.warn(`[${model.displayName}] ⚠️ Unknown action: ${decision.action}`);
     }
   }
 
   /**
-   * 执行买入
+   * 执行买入（支持动态杠杆选择）
    */
-  private executeBuy(account: AccountStatus, decision: TradingDecision) {
-    if (!decision.notional || !decision.leverage || !decision.side) return;
+  private executeBuy(account: AccountStatus, decision: TradingDecision, side: TradeSide) {
+    if (!decision.notional) return;
 
     const currentPrice = getCurrentPrice(decision.coin);
 
+    // ✅ 验证决策合理性（借鉴 LLM-trader-test）
+    const validation = validateTradingDecision(decision, currentPrice, side);
+    if (!validation.valid) {
+      console.warn(`[Trading] ❌ Decision validation failed for ${decision.coin}: ${validation.reason}`);
+      return;
+    }
+
+    // 🔥 动态杠杆：如果 AI 没有指定杠杆，根据 confidence 自动计算
+    const leverage = decision.leverage || calculateDynamicLeverage(decision.confidence);
+    console.log(`[Trading] ✅ Validated ${decision.coin} ${side} - Leverage: ${leverage}x (confidence: ${(decision.confidence * 100).toFixed(0)}%)`);
+
     // 检查资金充足
-    const requiredMargin = decision.notional / decision.leverage;
+    const requiredMargin = decision.notional / leverage;
     if (requiredMargin > account.availableCash * 0.95) {
       console.log(`Insufficient funds for ${decision.coin}`);
       return;
@@ -263,16 +374,16 @@ export class TradingEngineState {
     // LONG: liquidation = entryPrice * (1 - 1/leverage * 0.9)
     // SHORT: liquidation = entryPrice * (1 + 1/leverage * 0.9)
     const maintenanceMarginRate = 0.05; // 维持保证金率 5%
-    const liquidationPrice = decision.side === 'LONG'
-      ? currentPrice * (1 - (1 / decision.leverage) * (1 - maintenanceMarginRate))
-      : currentPrice * (1 + (1 / decision.leverage) * (1 - maintenanceMarginRate));
+    const liquidationPrice = side === 'LONG'
+      ? currentPrice * (1 - (1 / leverage) * (1 - maintenanceMarginRate))
+      : currentPrice * (1 + (1 / leverage) * (1 - maintenanceMarginRate));
 
     // 创建持仓
     const position: Position = {
       id: `${decision.coin}-${Date.now()}`,
       coin: decision.coin,
-      side: decision.side,
-      leverage: decision.leverage,
+      side: side,
+      leverage: leverage,
       notional: decision.notional,
       entryPrice: currentPrice,
       currentPrice: currentPrice,
@@ -281,8 +392,8 @@ export class TradingEngineState {
       unrealizedPnLPercent: (-fee / requiredMargin) * 100,
       exitPlan: decision.exitPlan || {
         invalidation: `Price moves against position by 5%`,
-        stopLoss: decision.side === 'LONG' ? currentPrice * 0.95 : currentPrice * 1.05,
-        takeProfit: decision.side === 'LONG' ? currentPrice * 1.10 : currentPrice * 0.90,
+        stopLoss: side === 'LONG' ? currentPrice * 0.95 : currentPrice * 1.05,
+        takeProfit: side === 'LONG' ? currentPrice * 1.10 : currentPrice * 0.90,
       },
       openedAt: Date.now(),
     };
@@ -290,7 +401,7 @@ export class TradingEngineState {
     account.positions.push(position);
     account.availableCash -= (requiredMargin + fee);
 
-    console.log(`${decision.coin} ${decision.side} opened at $${currentPrice.toFixed(2)}`);
+    console.log(`${decision.coin} ${side} opened at $${currentPrice.toFixed(2)}`);
   }
 
   /**
@@ -455,6 +566,7 @@ export class TradingEngineState {
       totalTrades: completedTrades.length,
       winRate: completedTrades.length > 0 ? (winningTrades / completedTrades.length) * 100 : 0,
       sharpeRatio: this.calculateSharpeRatio(equityHistory),
+      sortinoRatio: this.calculateSortinoRatio(equityHistory),
       maxDrawdown: this.calculateMaxDrawdown(equityHistory),
       positions: account.positions,
       recentDecisions: [],
@@ -523,7 +635,8 @@ export class TradingEngineState {
   }
 
   /**
-   * 计算夏普比率
+   * 计算夏普比率（Sharpe Ratio）
+   * 衡量风险调整后收益，考虑所有波动性
    */
   private calculateSharpeRatio(equityHistory: { timestamp: number; equity: number }[]): number {
     if (equityHistory.length < 2) return 0;
@@ -539,6 +652,31 @@ export class TradingEngineState {
     const stdDev = Math.sqrt(variance);
 
     return stdDev === 0 ? 0 : (avgReturn / stdDev) * Math.sqrt(252); // 年化
+  }
+
+  /**
+   * 计算索提诺比率（Sortino Ratio）- 借鉴 LLM-trader-test
+   * 只惩罚下行波动，比夏普比率更准确地反映风险
+   */
+  private calculateSortinoRatio(equityHistory: { timestamp: number; equity: number }[]): number {
+    if (equityHistory.length < 2) return 0;
+
+    const returns: number[] = [];
+    for (let i = 1; i < equityHistory.length; i++) {
+      const ret = (equityHistory[i].equity - equityHistory[i - 1].equity) / equityHistory[i - 1].equity;
+      returns.push(ret);
+    }
+
+    const avgReturn = returns.reduce((sum, r) => sum + r, 0) / returns.length;
+
+    // 只计算负收益的标准差（下行偏差）
+    const negativeReturns = returns.filter(r => r < 0);
+    if (negativeReturns.length === 0) return Infinity; // 没有负收益
+
+    const downsideVariance = negativeReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0) / negativeReturns.length;
+    const downsideDeviation = Math.sqrt(downsideVariance);
+
+    return downsideDeviation === 0 ? 0 : (avgReturn / downsideDeviation) * Math.sqrt(252); // 年化
   }
 
   /**

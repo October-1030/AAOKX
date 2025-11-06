@@ -50,11 +50,21 @@ function initializeEngine() {
   return tradingEngine;
 }
 
-function startTradingLoop() {
+async function startTradingLoop() {
   if (isRunning) return;
 
   isRunning = true;
   const engine = initializeEngine();
+
+  // ✅ 确保市场数据在第一次执行前已初始化
+  try {
+    await getMarketData();
+    console.log('✅ Market data initialized for trading loop');
+  } catch (error) {
+    console.error('❌ Failed to initialize market data:', error);
+    isRunning = false;
+    return;
+  }
 
   // 每3分钟执行一次交易周期（模拟Alpha Arena的2-3分钟间隔）
   updateInterval = setInterval(async () => {
@@ -93,7 +103,7 @@ export async function GET(request: Request) {
 
     switch (action) {
       case 'start':
-        startTradingLoop();
+        await startTradingLoop();
         return NextResponse.json({ status: 'started' });
 
       case 'stop':
@@ -101,11 +111,11 @@ export async function GET(request: Request) {
         return NextResponse.json({ status: 'stopped' });
 
       case 'status':
-        // ✅ 每次查询都更新市场数据（保证价格实时性）
+        // ✅ 先确保市场数据已初始化，再更新价格
+        const marketData = await getMarketData();
         await updateMarketDataWrapper();
 
         const performances = engine.getAllPerformances();
-        const marketData = await getMarketData();
 
         return NextResponse.json({
           isRunning,
@@ -117,11 +127,11 @@ export async function GET(request: Request) {
 
       default:
         // 默认返回当前状态
-        // ✅ 每次查询都更新市场数据（保证价格实时性）
+        // ✅ 先确保市场数据已初始化，再更新价格
+        const allMarketData = await getMarketData();
         await updateMarketDataWrapper();
 
         const allPerformances = engine.getAllPerformances();
-        const allMarketData = await getMarketData();
 
         return NextResponse.json({
           isRunning,

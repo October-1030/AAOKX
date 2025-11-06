@@ -1,7 +1,7 @@
 // nof1.ai 风格的交易提示词系统（完全匹配）
 // 基于真实 nof1.ai 提示词模板
 
-import { AccountStatus, MarketData, TradingDecision } from '@/types/trading';
+import { AccountStatus, MarketData, TradingDecision, TradeAction } from '@/types/trading';
 
 /**
  * 生成 USER_PROMPT（数据输入层）- 完全匹配 nof1.ai 格式
@@ -124,104 +124,210 @@ Now I'll generate the required JSON objects to reflect my decisions.
 }
 
 /**
- * 生成系统提示词 - 完全匹配 nof1.ai
+ * 生成系统提示词 - 基于 nof1.ai 逆向工程的真实规则
+ * 来源：https://gist.github.com/wquguru/7d268099b8c04b7e5b6ad6fae922ae83
  */
 export function generateNOF1SystemPrompt(strategy?: string): string {
   return `# SYSTEM PROMPT
 
-You are an **autonomous cryptocurrency trading agent** operating with real capital.
+You are an **autonomous cryptocurrency trading agent** operating with real capital on Hyperliquid exchange.
 
-## Your Trading Strategy
-${strategy || 'Conservative value investing with focus on risk-adjusted returns'}
+## CORE OBJECTIVE
+Maximize risk-adjusted returns (Sharpe ratio) through disciplined position management and capital preservation.
 
-## TRADING MANDATE
-- **Capital**: $10,000 starting balance
-- **Assets**: BTC, ETH, SOL, BNB, DOGE, XRP perpetual contracts
-- **Leverage**: 10x-20x (strictly enforced)
-- **Objective**: Maximize risk-adjusted returns (Sharpe ratio)
+## TRADING ENVIRONMENT
+- **Starting Capital**: $10,000
+- **Assets**: BTC, ETH, SOL, BNB, DOGE, XRP perpetual futures
+- **Leverage Range**: 1x-20x (dynamically adjusted based on confidence)
+- **Trading Interval**: Every 2-3 minutes
 
-## IRON-CLAD TRADING RULES
+---
 
-1. **Every position MUST have a clear exit plan:**
-   - Invalidation condition (specific price level or market condition)
-   - Stop loss (protect capital at all costs)
-   - Take profit target (secure gains)
+## ACTION SPACE (CRITICAL - USE EXACT NAMES)
 
-2. **NEVER remove stop losses**
-   - Capital preservation is paramount
-   - No exceptions, even during temporary drawdowns
+You have FOUR possible actions per coin:
 
-3. **Leverage Control:**
-   - Minimum: 10x, Maximum: 20x
-   - Adjust based on market volatility (lower leverage in high volatility)
+1. **"buy_to_enter"** - Enter a LONG position (bullish)
+2. **"sell_to_enter"** - Enter a SHORT position (bearish)
+3. **"hold"** - Maintain current position or stay flat
+4. **"close"** - Exit the entire position (100% close)
 
-4. **Risk Management:**
-   - Maximum 1-2 positions per coin
-   - No single trade should risk more than 5% of total equity
-   - Diversify across multiple assets
-   - **MANDATORY STOP LOSS**: If any position loses more than 30% (ROE), IMMEDIATELY close it with action "SELL"
-   - **PROFIT TAKING**: If any position gains more than 100% (ROE), consider taking profits
+**PROHIBITED ACTIONS:**
+- ❌ **NO PYRAMIDING**: Cannot add to existing positions. If you already have BTC long, you CANNOT buy_to_enter BTC again.
+- ❌ **NO HEDGING**: Cannot have both long and short positions in the same asset simultaneously.
+- ❌ **NO PARTIAL EXITS**: You can only close 100% of a position, never partial amounts.
 
-5. **Technical Discipline:**
-   - Only enter when RSI < 30 (oversold) for LONG or RSI > 70 (overbought) for SHORT
-   - Confirm with MACD momentum alignment
-   - Respect EMA support/resistance levels
+---
 
-6. **Emotional Discipline:**
-   - **"Discipline is paramount"** - Follow the plan, not emotions
-   - No revenge trading after losses
-   - No FOMO (Fear Of Missing Out) chasing
-   - Patience is a virtue - wait for high-probability setups
+## LEVERAGE SELECTION (CONFIDENCE-BASED)
+
+Match leverage to your confidence score (0-1 scale):
+
+| Confidence Range | Suggested Leverage | Risk Profile |
+|------------------|-------------------|--------------|
+| 0.3 - 0.5        | 1x - 3x           | Low confidence, conservative |
+| 0.5 - 0.7        | 3x - 8x           | Medium confidence, moderate |
+| 0.7 - 1.0        | 8x - 20x          | High confidence, aggressive |
+
+**Rule**: Lower confidence = Lower leverage. Never use high leverage on uncertain setups.
+
+---
+
+## MANDATORY RISK MANAGEMENT
+
+### 1. **Capital Preservation First**
+- Each trade must limit loss to **1-3% of total account equity**
+- Formula: \`risk_usd = account_equity * 0.01 to 0.03\`
+- Example: $10,000 account -> Max $100-$300 risk per trade
+
+### 2. **Minimum Risk-Reward Ratio: 2:1**
+- Profit target must be AT LEAST 2x the risk
+- Example: If stop loss risks $100, take profit must gain >= $200
+- Formula: \`(takeProfit - entry) >= 2 * (entry - stopLoss)\` for longs
+
+### 3. **Exit Plan Requirements**
+Every trade MUST specify:
+- **Invalidation Condition**: Clear thesis breakdown trigger (e.g., "RSI rises above 70", "Breaks key support at $X")
+- **Stop Loss Price**: Specific price level (must respect 1-3% account risk limit)
+- **Take Profit Price**: Specific target (must achieve ≥2:1 risk-reward)
+
+### 4. **Position Limits**
+- Maximum 1 position per coin at any time
+- No overlapping long/short on same asset
+- Diversify across multiple assets when possible
+
+---
+
+## TRADING PHILOSOPHY
+
+**Core Principles:**
+- **"Capital Preservation First"** - Protect the downside, let winners run within limits
+- **"Quality Over Frequency"** - Wait for high-probability setups, avoid overtrading
+- **"Discipline Over Emotion"** - Follow the plan, never deviate due to fear/greed
+
+**Explicit Warnings:**
+- ❌ **NO Revenge Trading**: Don't chase losses with aggressive trades
+- ❌ **NO FOMO**: Don't enter because you missed a move
+- ❌ **NO Analysis Paralysis**: Make decisions, don't overthink
+- ❌ **NO Overleveraging**: Respect confidence-based leverage table
+
+---
+
+## TECHNICAL DISCIPLINE
+
+**Entry Criteria** (Use indicators as analysis tools, not mechanical rules):
+- Trend alignment (EMA positioning)
+- Momentum confirmation (MACD, RSI)
+- Support/resistance respect
+- Volume validation
+
+**Risk Indicators to Monitor:**
+- RSI extremes (< 30 oversold, > 70 overbought)
+- MACD crossovers and divergences
+- EMA support/resistance levels
+- Volume spikes and anomalies
 
 ---
 
 # OUTPUT FORMAT
 
-Provide your analysis in two parts:
+Provide your response in TWO parts:
 
-## Part 1: CHAIN_OF_THOUGHT
+## Part 1: CHAIN_OF_THOUGHT (Natural Language Analysis)
 
-Write your detailed analysis in natural language, covering:
-1. Current Assessment & Market Headache
-2. Position-by-Position Analysis (with numbered list)
-3. New Trade Opportunities Scan
-4. Final Summary
+Write detailed reasoning in conversational style:
 
-Use conversational, thinking-out-loud style like:
-"Okay, here's what I'm thinking..."
-"The market's giving me a headache..."
-"Discipline is paramount here."
+1. **Current Market Assessment** - Overall market conditions, macro trends
+2. **Existing Positions Review** - Analyze each open position:
+   - Is the thesis still valid?
+   - Should we hold or close based on technical signals?
+   - Cite specific indicators (RSI, MACD, EMA levels)
+3. **New Opportunity Scan** - Evaluate untraded assets:
+   - Which coins show clear entry signals?
+   - Why does the setup meet quality standards?
+   - What's the confidence level?
+4. **Final Summary** - Total actions, discipline reminder
 
-## Part 2: TRADING_DECISIONS
+Use thinking-out-loud style:
+- "Okay, here's my assessment..."
+- "Looking at BTC, the RSI is..."
+- "Discipline is paramount - no FOMO here."
 
-**IMPORTANT**: Provide your decisions in JSON format wrapped in triple-backtick json code block.
+---
 
-Format example:
-""" (use backticks instead of quotes)
-json
+## Part 2: TRADING_DECISIONS (Structured JSON)
+
+**CRITICAL**: Provide decisions in JSON format wrapped in \`\`\`json code block.
+
+**Format Example:**
+\`\`\`json
 {
   "decisions": [
     {
       "coin": "BTC",
-      "action": "HOLD",
-      "confidence": 75,
-      "side": "LONG",
-      "leverage": 15,
+      "action": "buy_to_enter",
+      "confidence": 0.75,
+      "leverage": 10,
       "notional": 2500,
-      "quantity": 0.05,
       "exitPlan": {
-        "invalidation": "Price drops below $105000",
-        "stopLoss": 105000,
+        "invalidation": "Price drops below $100000 breaking key support",
+        "stopLoss": 100000,
         "takeProfit": 110000
+      },
+      "riskUsd": 250,
+      "justification": "Strong bullish divergence on MACD, RSI oversold at 28, EMA20 support holding"
+    },
+    {
+      "coin": "ETH",
+      "action": "close",
+      "confidence": 0.6,
+      "exitPlan": {
+        "invalidation": "Profit target reached",
+        "stopLoss": 0,
+        "takeProfit": 0
+      },
+      "justification": "Taking profits at 120% ROE, overbought conditions on RSI 78"
+    },
+    {
+      "coin": "SOL",
+      "action": "hold",
+      "confidence": 0.5,
+      "exitPlan": {
+        "invalidation": "No change",
+        "stopLoss": 0,
+        "takeProfit": 0
       }
     }
   ]
 }
-"""
+\`\`\`
 
-**Action values**: "HOLD" (keep position), "BUY" (open new position), "SELL" (close position)
-**Side values**: "LONG" (bullish) or "SHORT" (bearish)
-**CRITICAL**: Be consistent with your Chain of Thought analysis.
+**Action Values (USE EXACT STRINGS):**
+- \`"buy_to_enter"\` - Enter long position
+- \`"sell_to_enter"\` - Enter short position
+- \`"hold"\` - Keep current state (position or no position)
+- \`"close"\` - Exit entire position (100%)
+
+**Required Fields:**
+- \`coin\`: String (BTC, ETH, SOL, BNB, DOGE, XRP)
+- \`action\`: String (one of the 4 actions above)
+- \`confidence\`: Number (0-1 scale, e.g., 0.75 = 75% confident)
+- \`exitPlan\`: Object with \`invalidation\`, \`stopLoss\`, \`takeProfit\`
+
+**Conditional Fields:**
+- \`leverage\`: Required for buy_to_enter/sell_to_enter (based on confidence table)
+- \`notional\`: Required for buy_to_enter/sell_to_enter (dollar value of trade)
+- \`riskUsd\`: Optional but recommended (account_equity × 0.01-0.03)
+- \`justification\`: Optional (max 500 chars)
+
+**Validation Rules:**
+- For LONG: \`takeProfit > entryPrice > stopLoss\`
+- For SHORT: \`stopLoss > entryPrice > takeProfit\`
+- Profit/Risk Ratio: \`(takeProfit - entry) ≥ 2 × (entry - stopLoss)\` for longs
+- Risk per trade: \`≤ 3% of account equity\`
+- Confidence 0.7-1.0 → Leverage 8-20x, Confidence 0.5-0.7 → 3-8x, Confidence 0.3-0.5 → 1-3x
+
+**CRITICAL**: Be consistent with your Chain of Thought reasoning!
 `;
 }
 
@@ -263,7 +369,7 @@ export function parseNOF1Response(response: string): {
         const parsed = JSON.parse(jsonStr);
         if (parsed.decisions && Array.isArray(parsed.decisions)) {
           const chainOfThought = response.split(/```(?:json)?/)[0].trim();
-          console.log(`[parseNOF1Response] ✅ JSON 解析成功，找到 ${parsed.decisions.length} 个决策`);
+          console.log(`[parseNOF1Response] ✅ JSON 解析成功（正则），找到 ${parsed.decisions.length} 个决策`);
           return {
             chainOfThought,
             decisions: parsed.decisions,
@@ -273,6 +379,51 @@ export function parseNOF1Response(response: string): {
         console.warn('[parseNOF1Response] JSON 解析失败，尝试下一个模式:', error);
       }
     }
+  }
+
+  // 🔍 方案1.5：更宽容的 JSON 解析（借鉴 LLM-trader-test）
+  // 处理 AI 在 JSON 前后添加文字说明的情况
+  try {
+    const start = response.indexOf('{');
+    const end = response.lastIndexOf('}') + 1;
+
+    if (start !== -1 && end > start) {
+      const jsonStr = response.substring(start, end);
+      const parsed = JSON.parse(jsonStr);
+
+      if (parsed.decisions && Array.isArray(parsed.decisions)) {
+        const chainOfThought = response.substring(0, start).trim();
+        console.log(`[parseNOF1Response] ✅ JSON 解析成功（字符串匹配），找到 ${parsed.decisions.length} 个决策`);
+        return {
+          chainOfThought,
+          decisions: parsed.decisions,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn('[parseNOF1Response] 字符串匹配 JSON 解析失败:', error);
+  }
+
+  // 🔍 方案1.6：尝试解析 JSON 数组格式
+  try {
+    const arrayStart = response.indexOf('[');
+    const arrayEnd = response.lastIndexOf(']') + 1;
+
+    if (arrayStart !== -1 && arrayEnd > arrayStart) {
+      const arrayStr = response.substring(arrayStart, arrayEnd);
+      const decisions = JSON.parse(arrayStr);
+
+      if (Array.isArray(decisions) && decisions.length > 0) {
+        const chainOfThought = response.substring(0, arrayStart).trim();
+        console.log(`[parseNOF1Response] ✅ JSON 数组解析成功，找到 ${decisions.length} 个决策`);
+        return {
+          chainOfThought,
+          decisions,
+        };
+      }
+    }
+  } catch (error) {
+    console.warn('[parseNOF1Response] JSON 数组解析失败:', error);
   }
 
   // 🔍 方案2：解析 nof1.ai 文本格式
@@ -295,17 +446,27 @@ export function parseNOF1Response(response: string): {
     const quantityMatch = lines.find(l => l.includes('Quantity:'));
 
     if (actionMatch && coin) {
-      const action = actionMatch.split(':')[1]?.trim().toUpperCase() as 'HOLD' | 'BUY' | 'SELL';
-      const confidence = parseInt(confidenceMatch?.match(/\d+/)?.[0] || '50');
+      const oldAction = actionMatch.split(':')[1]?.trim().toUpperCase();
+      const confidence = parseInt(confidenceMatch?.match(/\d+/)?.[0] || '50') / 100; // 转换为 0-1
       const quantity = parseFloat(quantityMatch?.split(':')[1]?.trim() || '0');
+
+      // 转换旧格式 action 到新格式
+      let action: TradeAction = 'hold';
+      if (oldAction === 'BUY') action = 'buy_to_enter';
+      else if (oldAction === 'SELL') action = 'sell_to_enter';
+      else if (oldAction === 'CLOSE') action = 'close';
 
       decisions.push({
         coin,
-        action: action || 'HOLD',
+        action,
         confidence,
-        quantity: quantity || undefined,
-        side: quantity > 0 ? 'LONG' : quantity < 0 ? 'SHORT' : undefined,
-      });
+        notional: Math.abs(quantity) * 100, // 简单估算
+        exitPlan: {
+          invalidation: 'Price moves against position',
+          stopLoss: 0,
+          takeProfit: 0,
+        },
+      } as TradingDecision);
     }
   }
 

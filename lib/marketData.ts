@@ -240,8 +240,41 @@ export async function updateMarketData() {
 export function getMarketData(coin: Coin): MarketData {
   const history = marketHistory[coin];
 
-  if (history.length === 0) {
-    initializeMarketData();
+  // ⚠️ 如果历史数据为空，返回基于当前价格的虚拟数据
+  if (!history || history.length === 0) {
+    console.warn(`[MarketData] ⚠️ ${coin} history is empty, using fallback data`);
+
+    // 使用默认价格或缓存的真实价格（确保不为 0）
+    let fallbackPrice = INITIAL_PRICES[coin];
+    if (realPricesCache && realPricesCache[coin] && realPricesCache[coin].price > 0) {
+      fallbackPrice = realPricesCache[coin].price;
+    }
+
+    console.log(`[MarketData] 📌 ${coin} fallback price: $${fallbackPrice.toLocaleString()}`);
+
+    // 返回基本的市场数据（避免 undefined 错误）
+    return {
+      coin,
+      current: {
+        price: fallbackPrice,
+        ema_20: fallbackPrice,
+        ema_50: fallbackPrice,
+        ema_200: fallbackPrice,
+        macd: 0,
+        macd_signal: 0,
+        macd_histogram: 0,
+        rsi: 50,
+        rsi_7: 50,
+        rsi_14: 50,
+        atr: fallbackPrice * 0.02,
+        atr_3: fallbackPrice * 0.02,
+        atr_14: fallbackPrice * 0.02,
+        volume: 1000000,
+        volume_ratio: 1,
+      },
+      intraday: [],
+      daily: [],
+    };
   }
 
   // 获取最近10个10分钟K线（日内数据）
@@ -299,8 +332,5 @@ export function getCurrentPrice(coin: Coin): number {
   return history[history.length - 1].close;
 }
 
-// 自动初始化
-if (typeof window === 'undefined') {
-  // 服务端初始化
-  initializeMarketData();
-}
+// ✅ 移除自动初始化：应该由 API route 显式调用 await initializeMarketData()
+// 避免在模块加载时启动异步操作导致竞争条件

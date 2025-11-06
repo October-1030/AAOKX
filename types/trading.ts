@@ -4,7 +4,8 @@ export type Coin = 'BTC' | 'ETH' | 'SOL' | 'BNB' | 'DOGE' | 'XRP';
 
 export type TradeSide = 'LONG' | 'SHORT';
 
-export type TradeAction = 'BUY' | 'SELL' | 'HOLD' | 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_POSITION' | 'ADJUST_POSITION';
+// nof1.ai 真实动作类型（基于逆向工程）
+export type TradeAction = 'buy_to_enter' | 'sell_to_enter' | 'hold' | 'close';
 
 export interface TechnicalIndicators {
   price: number;
@@ -68,24 +69,21 @@ export interface AccountStatus {
   positions: Position[];
 }
 
+// nof1.ai 真实决策格式（基于逆向工程）
 export interface TradingDecision {
   coin: Coin;
-  action: TradeAction;
-  confidence: number; // 0-100
-  quantity?: number;
-  size?: number;        // 交易数量（币的数量）
-  side?: TradeSide;
-  leverage?: number;
-  notional?: number;
-  exitPlan?: {
-    invalidation: string;
-    stopLoss: number;
-    takeProfit: number;
+  action: TradeAction;  // 'buy_to_enter' | 'sell_to_enter' | 'hold' | 'close'
+  confidence: number;   // 0-1 (nof1.ai 格式，不是 0-100)
+  quantity?: number;    // 可选：用于 buy_to_enter/sell_to_enter
+  leverage?: number;    // 根据 confidence 动态计算：0.3-0.5→1-3x, 0.5-0.7→3-8x, 0.7-1.0→8-20x
+  notional?: number;    // 可选：交易名义价值
+  exitPlan: {           // 必填：nof1.ai 要求所有交易必须有退出计划
+    invalidation: string;  // 废弃条件描述
+    stopLoss: number;      // 止损价格（必须确保单笔损失 ≤ 1-3% 账户）
+    takeProfit: number;    // 止盈价格（必须确保盈亏比 ≥ 2:1）
   };
-  entryPlan?: {        // 入场计划（用于复杂订单）
-    orderType?: 'MARKET' | 'LIMIT';
-    limitPrice?: number;
-  };
+  riskUsd?: number;     // 可选：该笔交易的美元风险额
+  justification?: string; // 可选：决策理由（最多 500 字符）
 }
 
 export interface ChainOfThought {
@@ -122,6 +120,7 @@ export interface ModelPerformance {
   totalTrades: number;
   winRate: number;
   sharpeRatio: number;
+  sortinoRatio: number;  // 索提诺比率（只惩罚下行波动）
   maxDrawdown: number;
   positions: Position[];
   recentDecisions: AIResponse[];

@@ -36,6 +36,7 @@ export default function Leaderboard({ performances }: LeaderboardProps) {
           const totalTrades = perf.totalTrades ?? 0;
           const winRate = perf.winRate ?? 0;
           const sharpeRatio = perf.sharpeRatio ?? 0;
+          const sortinoRatio = perf.sortinoRatio ?? 0;
           const maxDrawdown = perf.maxDrawdown ?? 0;
           const positions = perf.positions ?? [];
 
@@ -90,7 +91,7 @@ export default function Leaderboard({ performances }: LeaderboardProps) {
               </div>
             </div>
 
-            <div className="mt-3 grid grid-cols-4 gap-4 text-sm">
+            <div className="mt-3 grid grid-cols-5 gap-4 text-sm">
               <div>
                 <div className="text-gray-400">Trades</div>
                 <div className="text-white font-semibold">{totalTrades}</div>
@@ -102,6 +103,10 @@ export default function Leaderboard({ performances }: LeaderboardProps) {
               <div>
                 <div className="text-gray-400">Sharpe</div>
                 <div className="text-white font-semibold">{sharpeRatio.toFixed(2)}</div>
+              </div>
+              <div>
+                <div className="text-gray-400">Sortino</div>
+                <div className="text-white font-semibold">{sortinoRatio.toFixed(2)}</div>
               </div>
               <div>
                 <div className="text-gray-400">Max DD</div>

@@ -102,24 +102,24 @@ export class RealTradingExecutor {
     const limits = await this.getAccountLimits();
 
     try {
-      // 根据决策类型执行
+      // 根据决策类型执行（nof1.ai 格式）
       switch (decision.action) {
-        case 'HOLD':
+        case 'hold':
           console.log('[RealTrading] ℹ️ 保持当前仓位');
           return { success: true, message: 'Hold position' };
 
-        case 'OPEN_LONG':
-        case 'OPEN_SHORT':
-          return await this.executeOpenPosition(decision, limits);
+        case 'buy_to_enter':
+          return await this.executeOpenPosition(decision, limits, 'LONG');
 
-        case 'CLOSE_POSITION':
+        case 'sell_to_enter':
+          return await this.executeOpenPosition(decision, limits, 'SHORT');
+
+        case 'close':
           return await this.executeClosePosition(decision);
 
-        case 'ADJUST_POSITION':
-          return await this.executeAdjustPosition(decision, limits);
-
         default:
-          return { success: false, message: 'Unknown action' };
+          console.log(`[RealTrading] ⚠️ 未知动作: ${decision.action}`);
+          return { success: false, message: `Unknown action: ${decision.action}` };
       }
     } catch (error) {
       console.error('[RealTrading] ❌ 执行失败:', error);
@@ -133,15 +133,15 @@ export class RealTradingExecutor {
   /**
    * 开仓
    */
-  private async executeOpenPosition(decision: TradingDecision, limits: any) {
-    const { coin, size, leverage, side, entryPlan, notional } = decision;
+  private async executeOpenPosition(decision: TradingDecision, limits: any, side: 'LONG' | 'SHORT') {
+    const { coin, leverage, notional } = decision;
 
-    if (!coin || !size || !leverage || !side) {
+    if (!coin || !leverage || !notional) {
       return { success: false, message: 'Missing required parameters' };
     }
 
-    // 🔥 关键修复：使用 notional（美元）进行验证和调整，而不是 size（币数量）
-    const sizeInUsd = notional || size; // 如果有 notional 使用 notional，否则假设 size 是美元
+    // 使用 notional（美元金额）
+    const sizeInUsd = notional;
 
     // 调整订单大小（美元）
     const adjustedSizeInUsd = adjustOrderSize(coin, sizeInUsd, limits);
@@ -162,7 +162,7 @@ export class RealTradingExecutor {
 
     console.log(`[RealTrading] 📝 开仓 ${side}:`, {
       coin,
-      originalSize: size,
+      originalSize: sizeInUsd,
       adjustedSize: adjustedSizeInUsd,
       leverage,
     });
@@ -249,18 +249,12 @@ export class RealTradingExecutor {
   }
 
   /**
-   * 调整仓位
+   * 调整仓位 - nof1.ai 不支持，已废弃
+   * @deprecated nof1.ai 规则禁止 pyramiding，此方法不再使用
    */
   private async executeAdjustPosition(decision: TradingDecision, limits: any) {
-    // 先平掉旧仓位
-    const closeResult = await this.executeClosePosition(decision);
-
-    if (!closeResult.success) {
-      return closeResult;
-    }
-
-    // 再开新仓位
-    return await this.executeOpenPosition(decision, limits);
+    console.warn('[RealTrading] ⚠️ 加仓功能已禁用（nof1.ai 规则）');
+    return { success: false, message: 'Adjust position not allowed (nof1.ai rules)' };
   }
 
   /**

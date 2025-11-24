@@ -61,9 +61,9 @@ export function calculateTradingLimits(balance: number): TradingLimits {
     console.log('[TradingConfig] 💵 中等模式');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.3, 50),
-      maxPositionPercent: 30,
-      maxLeverage: 5,
+      maxPositionSize: Math.min(balance * 0.2, 40), // ✅ 降低至 20%
+      maxPositionPercent: 20,
+      maxLeverage: 3, // ✅ 降低至 3x
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],
       minOrderSize: {
         BTC: 10,
@@ -79,9 +79,9 @@ export function calculateTradingLimits(balance: number): TradingLimits {
     console.log('[TradingConfig] 💎 标准模式');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.25, 2000), // 先用25%，等订单能成功后再调整
-      maxPositionPercent: 25,
-      maxLeverage: 20, // ✅ 修复：匹配 nof1.ai 系统提示词（10x-20x）
+      maxPositionSize: Math.min(balance * 0.15, 1500), // ✅ 降低至 15%（更保守）
+      maxPositionPercent: 15,
+      maxLeverage: 10, // ✅ 降低至 10x（避免过度杠杆）
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],
       minOrderSize: {
         BTC: 10,

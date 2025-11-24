@@ -30,7 +30,7 @@ export class RealTradingExecutor {
     this.config = {
       dryRun: config.dryRun ?? true, // 默认模拟模式
       enableRiskChecks: config.enableRiskChecks ?? true,
-      maxDailyTrades: config.maxDailyTrades ?? 20,
+      maxDailyTrades: config.maxDailyTrades ?? 150, // 每日最大150次交易（3分钟周期 × 24小时）
     };
 
     console.log('[RealTrading] 🚀 初始化真实交易执行器');
@@ -140,6 +140,17 @@ export class RealTradingExecutor {
       return { success: false, message: 'Missing required parameters' };
     }
 
+    // ✅ 先验证决策（风险回报比、止损止盈方向）
+    const { getCurrentPrice } = await import('./marketData');
+    const { validateTradingDecision } = await import('./tradingEngine');
+    const currentPrice = getCurrentPrice(coin);
+
+    const validation = validateTradingDecision(decision, currentPrice, side);
+    if (!validation.valid) {
+      console.warn(`[RealTrading] ❌ 决策验证失败: ${validation.reason}`);
+      return { success: false, message: `Decision validation failed: ${validation.reason}` };
+    }
+
     // 使用 notional（美元金额）
     const sizeInUsd = notional;
 
@@ -154,10 +165,10 @@ export class RealTradingExecutor {
     }
 
     // 验证订单（美元）
-    const validation = validateOrder(coin, adjustedSizeInUsd, leverage, limits);
-    if (!validation.valid) {
-      console.warn(`[RealTrading] ❌ 订单验证失败: ${validation.reason}`);
-      return { success: false, message: validation.reason || 'Validation failed' };
+    const orderValidation = validateOrder(coin, adjustedSizeInUsd, leverage, limits);
+    if (!orderValidation.valid) {
+      console.warn(`[RealTrading] ❌ 订单验证失败: ${orderValidation.reason}`);
+      return { success: false, message: orderValidation.reason || 'Validation failed' };
     }
 
     console.log(`[RealTrading] 📝 开仓 ${side}:`, {

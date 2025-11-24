@@ -1,0 +1,176 @@
+// Prisma Schema for Alpha Arena Trading System
+// 存储所有交易数据：已完成交易、持仓快照、账户状态、AI决策
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ==========================================
+// 1. 已完成的交易（Trade）
+// ==========================================
+model Trade {
+  id          String   @id @default(cuid())
+  modelName   String   // AI模型名称（如 "DeepSeek V3.1"）
+  coin        String   // 币种（BTC, ETH, SOL等）
+  side        String   // LONG 或 SHORT
+
+  // 价格信息
+  entryPrice  Float    // 入场价格
+  exitPrice   Float    // 出场价格
+
+  // 交易规模
+  leverage    Int      // 杠杆倍数
+  notional    Float    // 名义价值（美元）
+
+  // 盈亏
+  pnl         Float    // 盈亏（美元）
+  pnlPercent  Float    // 盈亏百分比
+
+  // 时间
+  openedAt    DateTime // 开仓时间
+  closedAt    DateTime // 平仓时间
+
+  // 退出原因
+  exitReason  String   // 如 "Stop loss triggered", "Take profit hit"
+
+  createdAt   DateTime @default(now())
+
+  @@index([modelName])
+  @@index([coin])
+  @@index([closedAt])
+}
+
+// ==========================================
+// 2. 持仓快照（PositionSnapshot）
+// 每次交易周期保存所有持仓状态
+// ==========================================
+model PositionSnapshot {
+  id                    String   @id @default(cuid())
+  modelName             String   // AI模型名称
+  coin                  String   // 币种
+  side                  String   // LONG 或 SHORT
+
+  // 持仓信息
+  leverage              Int      // 杠杆
+  notional              Float    // 名义价值
+  entryPrice            Float    // 入场价格
+  currentPrice          Float    // 当前价格
+  liquidationPrice      Float    // 清算价格
+
+  // 盈亏
+  unrealizedPnL         Float    // 未实现盈亏
+  unrealizedPnLPercent  Float    // 未实现盈亏百分比
+
+  // 智能止盈系统
+  maxUnrealizedPnL      Float?   // 最高浮盈
+  maxUnrealizedPnLPercent Float? // 最高浮盈百分比
+  trailingStopActivated Boolean  @default(false) // 移动止损是否激活
+
+  // 止损止盈计划
+  stopLoss              Float    // 止损价
+  takeProfit            Float    // 止盈价
+  invalidation          String   // 失效条件
+
+  // 时间
+  openedAt              DateTime // 开仓时间
+  snapshotAt            DateTime @default(now()) // 快照时间
+
+  @@index([modelName])
+  @@index([coin])
+  @@index([snapshotAt])
+}
+
+// ==========================================
+// 3. 账户快照（AccountSnapshot）
+// 每次交易周期保存账户状态
+// ==========================================
+model AccountSnapshot {
+  id              String   @id @default(cuid())
+  modelName       String   // AI模型名称
+
+  // 账户信息
+  availableCash   Float    // 可用现金
+  totalEquity     Float    // 总权益
+  totalReturn     Float    // 总回报率（%）
+
+  // 统计信息
+  tradingDuration BigInt   // 交易时长（毫秒）
+  totalCalls      Int      // 总调用次数
+
+  // 持仓数量
+  positionsCount  Int      // 当前持仓数量
+
+  timestamp       DateTime @default(now())
+
+  @@index([modelName])
+  @@index([timestamp])
+}
+
+// ==========================================
+// 4. AI决策记录（AIDecision）
+// 记录每次AI的决策内容
+// ==========================================
+model AIDecision {
+  id                String   @id @default(cuid())
+  modelName         String   // AI模型名称
+
+  // 决策内容
+  coin              String   // 币种
+  action            String   // buy_to_enter, sell_to_enter, close, hold
+  confidence        Float    // 信心度 (0-1)
+  leverage          Int?     // 杠杆（如果有）
+  notional          Float?   // 名义价值（如果有）
+
+  // 止损止盈计划
+  stopLoss          Float?   // 止损价
+  takeProfit        Float?   // 止盈价
+  invalidation      String?  // 失效条件
+
+  // 思维链（简化版）
+  chainOfThought    String   // AI的思考过程摘要
+
+  // 执行结果
+  executed          Boolean  @default(false) // 是否已执行
+  executionResult   String?  // 执行结果（成功/失败原因）
+
+  timestamp         DateTime @default(now())
+
+  @@index([modelName])
+  @@index([coin])
+  @@index([timestamp])
+}
+
+// ==========================================
+// 5. 权益历史（EquityHistory）
+// 记录每个模型的权益曲线
+// ==========================================
+model EquityHistory {
+  id        String   @id @default(cuid())
+  modelName String   // AI模型名称
+  equity    Float    // 权益值
+  timestamp DateTime @default(now())
+
+  @@index([modelName])
+  @@index([timestamp])
+}
+
+// ==========================================
+// 6. 系统日志（SystemLog）
+// 记录重要的系统事件
+// ==========================================
+model SystemLog {
+  id        String   @id @default(cuid())
+  level     String   // info, warn, error
+  category  String   // trading, risk, system
+  message   String   // 日志消息
+  metadata  String?  // JSON格式的额外数据
+  timestamp DateTime @default(now())
+
+  @@index([level])
+  @@index([category])
+  @@index([timestamp])
+}

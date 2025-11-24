@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { TradesResponse, TradeRecord } from '@/types/trading';
 import { CompletedTrade } from '@/types/trading';
-import { getTradingEngine } from '../trading/route';
+import { getTradingEngine } from '@/lib/tradingEngineManager';
 
 /**
  * GET /api/trades

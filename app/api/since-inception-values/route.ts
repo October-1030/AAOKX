@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { SinceInceptionValuesResponse } from '@/types/trading';
-import { getTradingEngine } from '../trading/route';
+import { getTradingEngine } from '@/lib/tradingEngineManager';
+
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
 
 /**
  * GET /api/since-inception-values

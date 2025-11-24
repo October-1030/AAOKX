@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { AccountTotalsResponse, AccountSnapshot } from '@/types/trading';
-import { getTradingEngine } from '../trading/route';
+import { getTradingEngine } from '@/lib/tradingEngineManager';
 import { getCurrentPrice } from '@/lib/marketData';
 
 /**

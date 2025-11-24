@@ -49,8 +49,8 @@ nof1.ai 的 Alpha Arena 使用 **Hyperliquid DEX**（去中心化交易所），
    - 杠杆倍数
 
 3. **账户余额**
-   - 初始资金：$10,000
-   - 当前余额：$11,250
+   - 初始资金：$1,000
+   - 当前余额：$1,125
    - 总收益：+12.5%
 
 4. **所有历史**
@@ -129,8 +129,8 @@ const tradeHash = generateTradeHash({
 ```typescript
 // 导出所有交易为 JSON
 const exportData = {
-  initialCapital: 10000,
-  currentEquity: 11250,
+  initialCapital: 1000,
+  currentEquity: 1125,
   totalReturn: 12.5,
   trades: [
     {

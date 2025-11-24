@@ -318,13 +318,23 @@ export class HyperliquidClient {
       const size = Math.abs(parseFloat(position.position.szi));
       const isBuy = parseFloat(position.position.szi) < 0; // 如果是空头，平仓需要买入
 
-      const order = await this.client.exchange.marketOrder(
-        symbol,
-        isBuy,
-        size,
-        null,
-        true // reduceOnly = true
-      );
+      // 获取当前价格用于市价单
+      const currentPrice = await this.getMarketPrice(coin);
+      // 使用 1% 滑点的限价单模拟市价单
+      const limitPrice = isBuy ? currentPrice * 1.01 : currentPrice * 0.99;
+
+      // 格式化数量精度
+      const precision = this.getPrecision(coin);
+      const formattedSize = parseFloat(size.toFixed(precision));
+
+      const order = await this.client.exchange.placeOrder({
+        coin: symbol,
+        is_buy: isBuy,
+        sz: formattedSize,
+        limit_px: limitPrice.toFixed(2),
+        order_type: { limit: { tif: 'Ioc' } }, // IoC = Immediate or Cancel (市价单)
+        reduce_only: true,
+      });
 
       console.log(`[Hyperliquid] ✅ ${symbol} 平仓成功`);
       return order;
@@ -381,6 +391,21 @@ export class HyperliquidClient {
       console.error(`[Hyperliquid] ❌ 设置杠杆失败:`, error);
       throw error;
     }
+  }
+
+  /**
+   * 获取币种精度
+   */
+  private getPrecision(coin: Coin): number {
+    const precisionMap: Record<Coin, number> = {
+      'BTC': 5,   // BTC: 5位小数
+      'ETH': 4,   // ETH: 4位小数
+      'SOL': 2,   // SOL: 2位小数
+      'BNB': 3,   // BNB: 3位小数
+      'DOGE': 0,  // DOGE: 整数
+      'XRP': 0,   // XRP: 整数
+    };
+    return precisionMap[coin] || 5;
   }
 }
 

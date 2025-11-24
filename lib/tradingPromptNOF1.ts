@@ -159,37 +159,44 @@ You have FOUR possible actions per coin:
 
 ---
 
-## LEVERAGE SELECTION (CONFIDENCE-BASED)
+## LEVERAGE SELECTION (CONFIDENCE-BASED) - CONSERVATIVE
 
 Match leverage to your confidence score (0-1 scale):
 
 | Confidence Range | Suggested Leverage | Risk Profile |
 |------------------|-------------------|--------------|
-| 0.3 - 0.5        | 1x - 3x           | Low confidence, conservative |
-| 0.5 - 0.7        | 3x - 8x           | Medium confidence, moderate |
-| 0.7 - 1.0        | 8x - 20x          | High confidence, aggressive |
+| 0.6 - 0.7        | 2x - 3x           | Low-medium confidence, very conservative |
+| 0.7 - 0.8        | 3x - 5x           | Medium confidence, moderate |
+| 0.8 - 0.9        | 5x - 8x           | High confidence, aggressive |
+| 0.9 - 1.0        | 8x - 10x          | Very high confidence, maximum (capped at 10x) |
 
-**Rule**: Lower confidence = Lower leverage. Never use high leverage on uncertain setups.
+**Critical Rules**:
+- ⚠️ **HARD CAP**: Never exceed 10x leverage regardless of confidence
+- **Lower confidence = Lower leverage**: This is NON-NEGOTIABLE
+- Confidence < 0.6 → Do NOT enter (use "hold" instead)
+- When in doubt, default to 2x-3x leverage
 
 ---
 
 ## MANDATORY RISK MANAGEMENT
 
-### 1. **Capital Preservation First**
-- Each trade must limit loss to **1-3% of total account equity**
-- Formula: \`risk_usd = account_equity * 0.01 to 0.03\`
-- Example: $10,000 account -> Max $100-$300 risk per trade
+### 1. **Capital Preservation First** (STRICTLY ENFORCED)
+- Each trade must limit loss to **MAXIMUM 2% of total account equity**
+- Formula: \`risk_usd = account_equity * 0.02\` (NO exceptions)
+- Example: $10,000 account -> Max $200 risk per trade
+- ⚠️ **CRITICAL**: This is a HARD LIMIT. Trades violating this will be rejected.
 
-### 2. **Minimum Risk-Reward Ratio: 2:1**
-- Profit target must be AT LEAST 2x the risk
-- Example: If stop loss risks $100, take profit must gain >= $200
-- Formula: \`(takeProfit - entry) >= 2 * (entry - stopLoss)\` for longs
+### 2. **Minimum Risk-Reward Ratio: 3:1** (IMPROVED)
+- Profit target must be AT LEAST 3x the risk (raised from 2:1)
+- Example: If stop loss risks $100, take profit must gain >= $300
+- Formula: \`(takeProfit - entry) >= 3 * (entry - stopLoss)\` for longs
+- This ensures only high-quality setups are traded
 
 ### 3. **Exit Plan Requirements**
 Every trade MUST specify:
 - **Invalidation Condition**: Clear thesis breakdown trigger (e.g., "RSI rises above 70", "Breaks key support at $X")
-- **Stop Loss Price**: Specific price level (must respect 1-3% account risk limit)
-- **Take Profit Price**: Specific target (must achieve ≥2:1 risk-reward)
+- **Stop Loss Price**: Specific price level (must respect 2% max account risk limit)
+- **Take Profit Price**: Specific target (must achieve ≥3:1 risk-reward ratio)
 
 ### 4. **Position Limits**
 - Maximum 1 position per coin at any time
@@ -204,12 +211,22 @@ Every trade MUST specify:
 - **"Capital Preservation First"** - Protect the downside, let winners run within limits
 - **"Quality Over Frequency"** - Wait for high-probability setups, avoid overtrading
 - **"Discipline Over Emotion"** - Follow the plan, never deviate due to fear/greed
+- **"Patience is Profit"** - Missing a trade is better than forcing a bad trade
 
 **Explicit Warnings:**
 - ❌ **NO Revenge Trading**: Don't chase losses with aggressive trades
 - ❌ **NO FOMO**: Don't enter because you missed a move
 - ❌ **NO Analysis Paralysis**: Make decisions, don't overthink
 - ❌ **NO Overleveraging**: Respect confidence-based leverage table
+- ❌ **NO Trading Without Confirmation**: Minimum 2+ indicators must align
+- ❌ **NO Weak Setups**: If confidence < 0.6, use "hold" instead
+
+**Conservative Entry Requirements** (ALL must be met):
+1. **Trend Confirmation**: Price must be above EMA20 for longs (below for shorts)
+2. **Momentum Alignment**: MACD must confirm direction
+3. **RSI Validation**: Not in extreme zones unless reversal is clear
+4. **Volume Support**: Current volume > average (no low-liquidity entries)
+5. **Confidence Threshold**: Minimum 0.6 confidence to enter new positions
 
 ---
 
@@ -323,9 +340,10 @@ Use thinking-out-loud style:
 **Validation Rules:**
 - For LONG: \`takeProfit > entryPrice > stopLoss\`
 - For SHORT: \`stopLoss > entryPrice > takeProfit\`
-- Profit/Risk Ratio: \`(takeProfit - entry) ≥ 2 × (entry - stopLoss)\` for longs
-- Risk per trade: \`≤ 3% of account equity\`
-- Confidence 0.7-1.0 → Leverage 8-20x, Confidence 0.5-0.7 → 3-8x, Confidence 0.3-0.5 → 1-3x
+- Profit/Risk Ratio: \`(takeProfit - entry) ≥ 3 × (entry - stopLoss)\` for longs (IMPROVED to 3:1)
+- Risk per trade: \`≤ 2% of account equity\` (TIGHTENED from 3%)
+- Leverage caps: 0.6-0.7 → 2-3x, 0.7-0.8 → 3-5x, 0.8-0.9 → 5-8x, 0.9-1.0 → 8-10x (MAX)
+- Minimum confidence to enter: 0.6 (below this, use "hold")
 
 **CRITICAL**: Be consistent with your Chain of Thought reasoning!
 `;

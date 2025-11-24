@@ -27,6 +27,45 @@ export const CONFIG = {
   // 日志级别
   LOG_LEVEL: 'info' as 'debug' | 'info' | 'warn' | 'error',
 
+  // 🛡️ 安全保护配置（方案A）
+  SAFETY: {
+    // 总亏损熔断：账户总亏损超过此百分比时，自动停止交易
+    MAX_TOTAL_LOSS_PERCENT: 15, // ✅ 降低至 -15% 触发熔断（更保守）
+
+    // 单日亏损限制：单日亏损超过此百分比时，暂停当天交易
+    MAX_DAILY_LOSS_PERCENT: 3, // ✅ 降低至 -3% 暂停当天（更严格）
+
+    // 高风险交易审核：超过以下阈值需要确认（暂时禁用，设为false）
+    HIGH_RISK_REVIEW_ENABLED: false,
+    HIGH_RISK_LEVERAGE_THRESHOLD: 10, // ✅ 降低至 10x 需要审核
+    HIGH_RISK_NOTIONAL_THRESHOLD: 3000, // ✅ 降低至 $3000 需要审核
+
+    // 启动资金（用于计算亏损百分比）
+    // ⚠️ 重要：改成你的实际测试网起始金额！
+    INITIAL_CAPITAL: 1000, // ✅ 修复：$1,000（实际测试网起始金额）
+  },
+
+  // 🛡️ 风险管理配置（借鉴 Nautilus Trader）
+  RISK_MANAGEMENT: {
+    // 启用风险管理系统
+    ENABLED: true,
+
+    // 单币种风险限制
+    MAX_COIN_LOSS_PERCENT: 10, // 单币种最大亏损10%
+    MAX_COIN_EXPOSURE_PERCENT: 30, // 单币种最大仓位占比30%
+
+    // 相关性限制
+    MAX_CORRELATED_EXPOSURE: 50, // 高相关币种总仓位不超过50%
+
+    // Kelly公式配置
+    KELLY_ENABLED: true, // 是否启用Kelly公式计算仓位
+    KELLY_FRACTION: 0.25, // 使用25% Kelly（保守）
+
+    // 持仓限制
+    MAX_TOTAL_POSITIONS: 6, // 最多6个持仓
+    MAX_SINGLE_POSITION_PERCENT: 20, // 单笔交易最大占比20%
+  },
+
   // Binance API配置
   BINANCE: {
     ENABLED: true,

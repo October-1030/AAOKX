@@ -297,8 +297,7 @@ parsed.decisions.forEach((decision, i) => {
   console.log(`${i + 1}. ${decision.coin}`);
   console.log(`   动作: ${decision.action}`);
   console.log(`   信心: ${decision.confidence}%`);
-  console.log(`   数量: ${decision.quantity || 0}`);
-  console.log(`   方向: ${decision.side || 'N/A'}\n`);
+  console.log(`   名义价值: $${decision.notional || 0}\n`);
 });
 
 // ========== 测试 6: 格式匹配度验证 ==========

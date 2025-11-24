@@ -58,6 +58,12 @@ export interface Position {
     takeProfit: number;
   };
   openedAt: number;
+
+  // 🎯 智能止盈系统字段
+  maxUnrealizedPnL?: number;     // 最高浮盈（用于高点回撤保护）
+  maxUnrealizedPnLPercent?: number; // 最高浮盈百分比
+  partialExitsDone?: number[];   // 已执行的分批止盈级别 [50, 100] 表示已平仓 50% 和 100% 级别
+  trailingStopActivated?: boolean; // 移动止损是否已激活
 }
 
 export interface AccountStatus {

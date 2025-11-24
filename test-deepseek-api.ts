@@ -187,9 +187,8 @@ console.log('==========================================\n');
         console.log(`${i + 1}. ${decision.coin}`);
         console.log(`   动作: ${decision.action}`);
         console.log(`   信心: ${decision.confidence}%`);
-        if (decision.quantity) {
-          console.log(`   数量: ${decision.quantity}`);
-          console.log(`   方向: ${decision.side}`);
+        if (decision.notional) {
+          console.log(`   名义价值: $${decision.notional}`);
         }
         console.log('');
       });

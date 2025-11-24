@@ -1,23 +1,14 @@
 import { NextResponse } from 'next/server';
-import { TradingEngineState } from '@/lib/tradingEngine';
-import { AI_MODELS } from '@/lib/aiModels';
+import { getTradingEngine } from '@/lib/tradingEngineManager';
 import { getAllMarketData, updateMarketData, initializeMarketData } from '@/lib/marketData';
 import { CONFIG } from '@/lib/config';
 import fs from 'fs';
 import path from 'path';
 
-// 全局交易引擎实例（在实际生产环境中应使用数据库）
-let tradingEngine: TradingEngineState | null = null;
+// 运行状态管理
 let isRunning = false;
 let updateInterval: NodeJS.Timeout | null = null;
 let marketDataInitialized = false;
-
-/**
- * 获取全局交易引擎实例（供其他 API 端点使用）
- */
-export function getTradingEngine(): TradingEngineState | null {
-  return tradingEngine;
-}
 
 /**
  * 获取市场数据（使用 CoinGecko 现货价格）
@@ -44,10 +35,7 @@ async function updateMarketDataWrapper() {
 }
 
 function initializeEngine() {
-  if (!tradingEngine) {
-    tradingEngine = new TradingEngineState(AI_MODELS);
-  }
-  return tradingEngine;
+  return getTradingEngine();
 }
 
 async function startTradingLoop() {
@@ -66,8 +54,28 @@ async function startTradingLoop() {
     return;
   }
 
+  console.log('🚀 Trading engine started');
+  console.log(`📊 Data source: ${CONFIG.USE_REAL_MARKET_DATA ? 'CoinGecko (Real Prices) + Simulated K-lines' : 'Simulated'}`);
+
+  // 🔥 立即执行第一次交易周期
+  console.log('\n========================================');
+  console.log('🚀 执行第一次交易周期');
+  console.log('========================================\n');
+
+  try {
+    await updateMarketDataWrapper();
+    await engine.executeTradingCycle();
+    console.log('\n✅ 第一次交易周期执行完成\n');
+  } catch (error) {
+    console.error('❌ First trading cycle error:', error);
+  }
+
   // 每3分钟执行一次交易周期（模拟Alpha Arena的2-3分钟间隔）
   updateInterval = setInterval(async () => {
+    console.log('\n========================================');
+    console.log(`🚀 执行定期交易周期 (${new Date().toLocaleTimeString()})`);
+    console.log('========================================\n');
+
     try {
       // 更新市场数据
       await updateMarketDataWrapper();
@@ -75,14 +83,13 @@ async function startTradingLoop() {
       // 执行交易周期
       await engine.executeTradingCycle();
 
-      console.log('✅ Trading cycle completed');
+      console.log('\n✅ 交易周期执行完成\n');
     } catch (error) {
       console.error('❌ Trading cycle error:', error);
     }
   }, CONFIG.TRADING_INTERVAL_MS);
 
-  console.log('🚀 Trading engine started');
-  console.log(`📊 Data source: ${CONFIG.USE_REAL_MARKET_DATA ? 'CoinGecko (Real Prices) + Simulated K-lines' : 'Simulated'}`);
+  console.log(`⏰ 定时器已启动：每 ${CONFIG.TRADING_INTERVAL_MS / 1000} 秒执行一次`);
 }
 
 function stopTradingLoop() {

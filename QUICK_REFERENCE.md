@@ -261,7 +261,7 @@ export const CONFIG = {
   DATA_REFRESH_INTERVAL_MS: 60000,  // 1分钟
 
   // 初始资金
-  INITIAL_BALANCE: 10000,
+  INITIAL_BALANCE: 1000,
 
   // 杠杆范围
   MIN_LEVERAGE: 10,

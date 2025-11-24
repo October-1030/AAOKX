@@ -46,3 +46,16 @@ DEEPSEEK_INTEGRATION_COMPLETE.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+/lib/generated/prisma
+
+# Database files
+*.db
+*.db-journal
+dev.db
+prisma/*.db
+prisma/*.db-journal
+
+# Temp files
+nul
+*.txt

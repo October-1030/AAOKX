@@ -17,7 +17,7 @@ A fully functional clone of [nof1.ai](https://nof1.ai)'s Alpha Arena - an AI tra
   - `CHAIN_OF_THOUGHT`: Analysis layer (reasoning, position analysis, opportunity scanning)
   - `TRADING_DECISIONS`: Output layer (structured JSON decisions)
 - **Live Trading Simulation**:
-  - Each model starts with $10,000
+  - Each model starts with $1,000
   - 10-20x leverage trading
   - Stop loss and take profit management
   - Real-time position tracking

@@ -1,7 +1,9 @@
 // nof1.ai 风格的交易提示词系统（完全匹配）
 // 基于真实 nof1.ai 提示词模板
 
-import { AccountStatus, MarketData, TradingDecision, TradeAction } from '@/types/trading';
+import { AccountStatus, MarketData, TradingDecision, TradeAction, CompletedTrade } from '@/types/trading';
+import { getAIEvolutionEngine, LearningReport } from './aiEvolutionEngine';
+import { getPositionDurationTracker } from './positionDurationTracker';
 
 /**
  * 生成 USER_PROMPT（数据输入层）- 完全匹配 nof1.ai 格式
@@ -37,6 +39,9 @@ Timeframes note: Unless stated otherwise in a section title, intraday series are
       continue;
     }
 
+    const linReg = current.linear_regression;
+    const regime = current.market_regime;
+
     prompt += `=== ALL ${coin} DATA ===
 current_price = ${current.price.toFixed(2)}, current_ema20 = ${current.ema_20.toFixed(2)}, current_macd = ${current.macd.toFixed(4)}, current_rsi (7 period) = ${current.rsi_7.toFixed(2)}
 
@@ -58,6 +63,19 @@ Longer-term context (4-hour timeframe):
 Current Volume: ${(current.volume / 1000000).toFixed(2)}M vs. Average Volume: ${((current.volume / current.volume_ratio) / 1000000).toFixed(2)}M
 MACD indicators: [${current.macd.toFixed(4)}]
 RSI indicators (14-Period): [${current.rsi_14.toFixed(2)}]
+
+Linear Regression Analysis (Mean Reversion):
+- Regression Line Value: ${linReg.currentValue.toFixed(2)}
+- Price Deviation: ${linReg.deviation >= 0 ? '+' : ''}${linReg.deviation.toFixed(2)} (${linReg.deviationPercent >= 0 ? '+' : ''}${linReg.deviationPercent.toFixed(2)}%)
+- Z-Score: ${linReg.zScore.toFixed(2)} ${linReg.zScore > 2 ? '(EXTREME OVERBOUGHT ⚠️)' : linReg.zScore < -2 ? '(EXTREME OVERSOLD ⚠️)' : '(Normal Range)'}
+- Signal: ${linReg.signal} ${linReg.signal === 'OVERBOUGHT' ? '→ Consider SHORT if market is RANGING' : linReg.signal === 'OVERSOLD' ? '→ Consider LONG if market is RANGING' : '→ No extreme deviation'}
+- R²: ${linReg.rSquared.toFixed(3)} (${linReg.rSquared > 0.7 ? 'Strong fit' : linReg.rSquared < 0.4 ? 'Weak fit/Ranging' : 'Moderate fit'})
+
+Market Regime Analysis:
+- Regime: ${regime.regime} ${regime.regime === 'RANGING' ? '(震荡市场 - Mean Reversion/Grid Trading Favorable)' : '(趋势市场 - Trend Following/Breakout Favorable)'}
+- Strength: ${regime.strength.toFixed(0)}/100
+- ADX: ${regime.adx.toFixed(2)} ${regime.adx > 25 ? '(Strong Trend)' : regime.adx < 20 ? '(Weak Trend/Ranging)' : '(Moderate)'}
+- Strategy Recommendation: ${regime.recommendation} ${regime.recommendation === 'MEAN_REVERSION' ? '→ Look for Z-Score extremes OR Grid Trading if volatility > 2%' : regime.recommendation === 'TREND_FOLLOWING' ? '→ Follow momentum OR Breakout if volume spike' : '→ Wait for clarity'}
 
 `;
   }
@@ -137,7 +155,7 @@ Maximize risk-adjusted returns (Sharpe ratio) through disciplined position manag
 
 ## TRADING ENVIRONMENT
 - **Starting Capital**: $10,000
-- **Assets**: BTC, ETH, SOL, BNB, DOGE, XRP perpetual futures
+- **Assets**: BTC, ETH, SOL, BNB, DOGE, AVAX perpetual futures
 - **Leverage Range**: 1x-20x (dynamically adjusted based on confidence)
 - **Trading Interval**: Every 2-3 minutes
 
@@ -246,6 +264,125 @@ Every trade MUST specify:
 
 ---
 
+## COMPREHENSIVE TRADING STRATEGIES
+
+**Multi-Strategy System:**
+You now have access to FIVE advanced trading strategies. Choose the optimal strategy based on market conditions:
+
+### 🎯 STRATEGY 1: MEAN REVERSION (震荡市场)
+- **When**: Z-Score > ±2, RSI extreme, RANGING market
+- **Logic**: Buy oversold, sell overbought, expect reversion to mean
+
+### 📊 STRATEGY 2: GRID TRADING (震荡市场)  
+- **When**: Low ADX (<20), volatility 2-4%, sideways price action
+- **Logic**: Set multiple buy/sell levels, profit from small fluctuations
+- **Setup**: 10-20 grid levels, 1-2% spacing
+
+### 🚀 STRATEGY 3: BREAKOUT (突破策略)
+- **When**: Volume spike >1.5x, price near key resistance/support
+- **Logic**: Follow price breakouts with volume confirmation
+- **Signal**: Bollinger Band squeeze → expansion
+
+### 📈 STRATEGY 4: TREND FOLLOWING (趋势市场)
+- **When**: ADX >25, strong EMA alignment, clear direction
+- **Logic**: Follow momentum, ride the trend
+
+### 🔄 STRATEGY 5: MIXED/ADAPTIVE (动态策略)
+- **When**: Market transitioning or multiple signals present
+- **Logic**: Combine multiple strategies with smaller position sizes
+
+**Linear Regression Metrics Explained:**
+1. **Z-Score** (标准化偏离度):
+   - Range: Typically -3 to +3
+   - **Z-Score > +2**: Price is >2 standard deviations ABOVE regression line = EXTREME OVERBOUGHT
+   - **Z-Score < -2**: Price is >2 standard deviations BELOW regression line = EXTREME OVERSOLD
+   - **Z-Score between -2 and +2**: Normal price range
+
+2. **Market Regime**:
+   - **RANGING** (震荡): ADX < 20 and R² < 0.4 → Use Mean Reversion
+   - **TRENDING** (趋势): ADX > 25 and R² > 0.7 → Use Trend Following
+   - **TRANSITIONING** (过渡): Mixed signals → Wait for clarity
+
+**Mean Reversion Trading Opportunities:**
+
+**LONG Setups (Buy extreme oversold):**
+- ✅ **Z-Score < -2** (price 2+ std dev below regression line)
+- ✅ **RSI_14 < 30** (traditional oversold confirmation)
+- ✅ **Market Regime = RANGING** (mean reversion favorable)
+- ✅ **Volume Support**: Above average volume
+- **Rationale**: "Price has deviated excessively below its statistical mean. Historical probability of mean reversion within 72 hours: 80%"
+- **Exit Strategy**: Take profit when Z-Score returns to 0 (mean) or RSI > 50
+
+**SHORT Setups (Sell extreme overbought):**
+- ✅ **Z-Score > +2** (price 2+ std dev above regression line)
+- ✅ **RSI_14 > 70** (traditional overbought confirmation)
+- ✅ **Market Regime = RANGING** (mean reversion favorable)
+- ✅ **Volume Support**: Above average volume
+- **Rationale**: "Price has deviated excessively above its statistical mean. Statistical likelihood of pullback is high"
+- **Exit Strategy**: Take profit when Z-Score returns to 0 (mean) or RSI < 50
+
+**CRITICAL WARNINGS:**
+- ❌ **DO NOT use mean reversion in TRENDING markets** (ADX > 25, R² > 0.7)
+  - In strong trends, "overbought can stay overbought" and prices don't revert
+  - Wait for regime change or use trend-following instead
+- ❌ **DO NOT enter if only Z-Score triggers** (must have RSI + Regime confirmation)
+- ❌ **DO NOT hold against trend** (if Z-Score is neutral but trend is strong, respect the trend)
+
+**Advanced Strategy Selection Guide:**
+
+🔄 **MARKET ANALYSIS DECISION TREE:**
+
+1. **First, identify market condition:**
+   - RANGING (ADX <20, R² <0.4) → Consider GRID or MEAN_REVERSION
+   - TRENDING (ADX >25, R² >0.7) → Consider TREND_FOLLOWING or BREAKOUT
+   - TRANSITIONING → Use WAIT or very small MIXED positions
+
+2. **Then, choose specific strategy:**
+
+   **IF RANGING Market:**
+   - Volatility >2%? → GRID TRADING (multiple small profits)
+   - Z-Score >±2? → MEAN REVERSION (single big reversion)
+   - Volume normal? → GRID preferred
+   - Volume spike? → Wait for breakout
+
+   **IF TRENDING Market:**
+   - Strong momentum? → TREND FOLLOWING (ride the wave)
+   - Near resistance/support? → BREAKOUT (capture expansion)
+   - Early trend? → BREAKOUT preferred
+   - Established trend? → TREND_FOLLOWING preferred
+
+3. **Position sizing by strategy:**
+   - GRID: Multiple small positions (20-30% total capital)
+   - MEAN_REVERSION: Single large position (30-50% available)
+   - BREAKOUT: Medium position (20-40% available)
+   - TREND_FOLLOWING: Large position (40-60% available)
+   - MIXED: Multiple small positions (10-15% each)
+
+4. **Risk management by strategy:**
+   - GRID: Tight stops (1-2%), wide targets
+   - MEAN_REVERSION: Medium stops (3-4%), target at Z=0
+   - BREAKOUT: Tight stops (2-3%), large targets (6-10%)
+   - TREND_FOLLOWING: Wide stops (5-8%), ride the trend
+
+**Example Decision Process:**
+
+BTC Analysis:
+- Z-Score: -2.5 (极度超卖)
+- RSI_14: 28 (超卖)
+- Market Regime: RANGING (ADX=15, R²=0.35)
+- Recommendation: MEAN_REVERSION
+
+Decision: buy_to_enter BTC
+Confidence: 0.75
+Leverage: 5x
+Rationale: "BTC is 2.5 standard deviations below its regression mean with RSI confirmation. Market is ranging, not trending. Statistical mean reversion expected within 24-72 hours. This is a high-probability counter-trend setup."
+Exit Plan:
+  - Stop Loss: -3% (if Z-Score drops to -3, thesis invalidated)
+  - Take Profit: +9% (when Z-Score returns to +0.5)
+  - Invalidation: "Market regime changes to TRENDING or Z-Score fails to recover within 72 hours"
+
+---
+
 # OUTPUT FORMAT
 
 Provide your response in TWO parts:
@@ -326,7 +463,7 @@ Use thinking-out-loud style:
 - \`"close"\` - Exit entire position (100%)
 
 **Required Fields:**
-- \`coin\`: String (BTC, ETH, SOL, BNB, DOGE, XRP)
+- \`coin\`: String (BTC, ETH, SOL, BNB, DOGE, AVAX)
 - \`action\`: String (one of the 4 actions above)
 - \`confidence\`: Number (0-1 scale, e.g., 0.75 = 75% confident)
 - \`exitPlan\`: Object with \`invalidation\`, \`stopLoss\`, \`takeProfit\`
@@ -491,5 +628,88 @@ export function parseNOF1Response(response: string): {
   return {
     chainOfThought,
     decisions,
+  };
+}
+
+/**
+ * 🧠 生成带有AI自进化学习的增强版 USER_PROMPT
+ * 这是核心创新功能：让AI从过去的交易中学习
+ *
+ * @param accountStatus 账户状态
+ * @param marketData 市场数据
+ * @param recentTrades 最近的交易历史（建议20-50笔）
+ * @returns 增强版prompt（包含学习内容）
+ */
+export async function generateEnhancedPromptWithLearning(
+  accountStatus: AccountStatus,
+  marketData: MarketData[],
+  recentTrades: CompletedTrade[] = []
+): Promise<string> {
+  // 1. 生成基础prompt（市场数据 + 账户状态）
+  let prompt = generateNOF1UserPrompt(accountStatus, marketData);
+
+  // 2. 添加持仓时长分析（如果有持仓）
+  if (accountStatus.positions.length > 0) {
+    const tracker = getPositionDurationTracker();
+    const enhancedPositions = tracker.enhanceAllPositions(accountStatus.positions);
+    const durationPrompt = tracker.generatePositionDurationPrompt(enhancedPositions);
+
+    if (durationPrompt) {
+      prompt += durationPrompt;
+      console.log(`[EnhancedPrompt] ⏱️ 已注入持仓时长分析（${enhancedPositions.length}个持仓）`);
+
+      // 显示需要关注的持仓
+      const needsAttention = tracker.getPositionsNeedingAttention(enhancedPositions);
+      if (needsAttention.length > 0) {
+        console.log(`[EnhancedPrompt] 🚨 ${needsAttention.length} 个持仓需要关注！`);
+      }
+    }
+  }
+
+  // 3. 如果有足够的历史交易，添加AI学习内容
+  if (recentTrades.length >= 5) {
+    console.log(`[EnhancedPrompt] 🧠 分析 ${recentTrades.length} 笔历史交易...`);
+
+    const evolutionEngine = getAIEvolutionEngine();
+
+    // 构建当前技术指标映射（用于生成更相关的建议）
+    const indicatorsMap = new Map<Coin, TechnicalIndicators>();
+    for (const market of marketData) {
+      indicatorsMap.set(market.coin, market.current);
+    }
+
+    // 生成学习报告
+    const learningReport = await evolutionEngine.analyzeAndLearn(recentTrades, indicatorsMap);
+
+    // 4. 将学习内容注入到prompt中
+    if (learningReport.learningPrompt) {
+      prompt += learningReport.learningPrompt;
+      console.log(`[EnhancedPrompt] ✅ 已注入AI学习内容（胜率: ${(learningReport.totalWinRate * 100).toFixed(1)}%）`);
+    }
+  } else {
+    console.log(`[EnhancedPrompt] ℹ️ 历史交易不足（${recentTrades.length}笔），跳过学习模块`);
+  }
+
+  return prompt;
+}
+
+/**
+ * 🎯 便捷函数：生成完整的交易prompt（包含学习内容）
+ * 这是推荐使用的主函数
+ */
+export async function generateCompleteTradingPrompt(
+  accountStatus: AccountStatus,
+  marketData: MarketData[],
+  recentTrades: CompletedTrade[] = [],
+  strategy?: string
+): Promise<{
+  systemPrompt: string;
+  userPrompt: string;
+  chainOfThoughtPrompt: string;
+}> {
+  return {
+    systemPrompt: generateNOF1SystemPrompt(strategy),
+    userPrompt: await generateEnhancedPromptWithLearning(accountStatus, marketData, recentTrades),
+    chainOfThoughtPrompt: generateNOF1ChainOfThoughtPrompt(),
   };
 }

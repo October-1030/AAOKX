@@ -11,7 +11,10 @@ A fully functional clone of [nof1.ai](https://nof1.ai)'s Alpha Arena - an AI tra
 ### ✅ Complete Implementation
 
 - **6 AI Models Competing**: DeepSeek V3.1, Claude 4.5 Sonnet, GPT-5, Gemini 2.5 Pro, Qwen 3 Max, Grok 4
-- **Real Technical Indicators**: EMA, MACD, RSI, ATR calculations on simulated market data
+- **Advanced Technical Indicators**:
+  - Traditional: EMA (20/50/200), MACD, RSI (7/14), ATR (3/14)
+  - Statistical: **Linear Regression**, **Z-Score**, **Market Regime Detection** (ADX)
+  - **Dual Strategy System**: Automatically switches between Mean Reversion and Trend Following
 - **Three-Layer Prompt Architecture**:
   - `USER_PROMPT`: Data input layer (market data, account status, positions)
   - `CHAIN_OF_THOUGHT`: Analysis layer (reasoning, position analysis, opportunity scanning)
@@ -84,9 +87,9 @@ alpha-arena-clone/
 │   ├── MarketOverview.tsx      # Market data display
 │   └── ModelChat.tsx           # AI reasoning viewer
 ├── lib/
-│   ├── indicators.ts           # Technical indicators (EMA, MACD, RSI, ATR)
+│   ├── indicators.ts           # Technical indicators (EMA, MACD, RSI, ATR, Linear Regression)
 │   ├── marketData.ts           # Market data simulator
-│   ├── tradingPrompt.ts        # Three-layer prompt system
+│   ├── tradingPromptNOF1.ts    # Three-layer prompt system with Mean Reversion
 │   ├── aiModels.ts             # AI model integrations
 │   └── tradingEngine.ts        # Trading execution engine
 ├── types/
@@ -169,11 +172,22 @@ This clone implements the exact **three-layer architecture** used by Alpha Arena
 
 All indicators are calculated from scratch:
 
+**Traditional Indicators:**
 - **EMA** (Exponential Moving Average): 20, 50, 200 periods
 - **MACD** (Moving Average Convergence Divergence): 12/26/9 periods
-- **RSI** (Relative Strength Index): 14 periods
-- **ATR** (Average True Range): 14 periods
+- **RSI** (Relative Strength Index): 7, 14 periods
+- **ATR** (Average True Range): 3, 14 periods
 - **Volume Analysis**: Current vs average volume ratio
+
+**Advanced Statistical Indicators (NEW!):**
+- **Linear Regression**: 20-period regression line with R² fit quality
+- **Z-Score**: Standardized price deviation (±2 = extreme overbought/oversold)
+- **Market Regime Detection**: ADX-based RANGING vs TRENDING identification
+- **Dual Strategy System**: Automatically switches between:
+  - **Mean Reversion** - Buy oversold, sell overbought (震荡市场)
+  - **Trend Following** - Follow momentum direction (趋势市场)
+
+📖 **[Read Mean Reversion Strategy Guide →](MEAN_REVERSION_GUIDE.md)**
 
 ## ⚙️ Configuration
 

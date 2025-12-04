@@ -16,12 +16,91 @@ const HYPERLIQUID_CONFIG = {
 
 // 币种映射到 Hyperliquid 的永续合约交易对
 const COIN_TO_SYMBOL: Record<Coin, string> = {
-  BTC: 'BTC-PERP',   // ✅ 永续合约符号
-  ETH: 'ETH-PERP',   // ✅ 永续合约符号
-  SOL: 'SOL-PERP',   // ✅ 永续合约符号
-  BNB: 'BNB-PERP',   // ✅ 永续合约符号
-  DOGE: 'DOGE-PERP', // ✅ 永续合约符号
-  XRP: 'XRP-PERP',   // ✅ 永续合约符号
+  // 主流币种 (原有6个)
+  BTC: 'BTC-PERP',
+  ETH: 'ETH-PERP',
+  SOL: 'SOL-PERP',
+  BNB: 'BNB-PERP',
+  DOGE: 'DOGE-PERP',
+  XRP: 'XRP-PERP',
+  
+  // L1公链
+  ATOM: 'ATOM-PERP',
+  AVAX: 'AVAX-PERP',
+  DOT: 'DOT-PERP',
+  ADA: 'ADA-PERP',
+  NEAR: 'NEAR-PERP',
+  FIL: 'FIL-PERP',
+  TIA: 'TIA-PERP',
+  TON: 'TON-PERP',
+  SUI: 'SUI-PERP',
+  APT: 'APT-PERP',
+  SEI: 'SEI-PERP',
+  INJ: 'INJ-PERP',
+  
+  // DeFi蓝筹
+  UNI: 'UNI-PERP',
+  LINK: 'LINK-PERP',
+  AAVE: 'AAVE-PERP',
+  CRV: 'CRV-PERP',
+  LDO: 'LDO-PERP',
+  PENDLE: 'PENDLE-PERP',
+  ENS: 'ENS-PERP',
+  SUSHI: 'SUSHI-PERP',
+  
+  // L2/扩容
+  OP: 'OP-PERP',
+  ARB: 'ARB-PERP',
+  MATIC: 'MATIC-PERP',
+  LTC: 'LTC-PERP',
+  BCH: 'BCH-PERP',
+  ETC: 'ETC-PERP',
+  
+  // Meme币热门
+  kPEPE: 'kPEPE-PERP',
+  kSHIB: 'kSHIB-PERP',
+  WIF: 'WIF-PERP',
+  POPCAT: 'POPCAT-PERP',
+  BOME: 'BOME-PERP',
+  GOAT: 'GOAT-PERP',
+  PNUT: 'PNUT-PERP',
+  PENGU: 'PENGU-PERP',
+  kBONK: 'kBONK-PERP',
+  
+  // AI概念
+  AIXBT: 'AIXBT-PERP',
+  VIRTUAL: 'VIRTUAL-PERP',
+  ZEREBRO: 'ZEREBRO-PERP',
+  TAO: 'TAO-PERP',
+  RENDER: 'RENDER-PERP',
+  FET: 'FET-PERP',
+  
+  // 新热点
+  TRUMP: 'TRUMP-PERP',
+  HYPE: 'HYPE-PERP',
+  MOVE: 'MOVE-PERP',
+  ME: 'ME-PERP',
+  USUAL: 'USUAL-PERP',
+  MORPHO: 'MORPHO-PERP',
+  
+  // 游戏/NFT
+  IMX: 'IMX-PERP',
+  GALA: 'GALA-PERP',
+  SAND: 'SAND-PERP',
+  GMT: 'GMT-PERP',
+  YGG: 'YGG-PERP',
+  BIGTIME: 'BIGTIME-PERP',
+  
+  // 其他热门
+  JUP: 'JUP-PERP',
+  PYTH: 'PYTH-PERP',
+  ONDO: 'ONDO-PERP',
+  ENA: 'ENA-PERP',
+  JTO: 'JTO-PERP',
+  W: 'W-PERP',
+  STRK: 'STRK-PERP',
+  ETHFI: 'ETHFI-PERP',
+  BLAST: 'BLAST-PERP'
 };
 
 /**
@@ -107,7 +186,7 @@ export class HyperliquidClient {
   }
 
   /**
-   * 获取市场价格
+   * 获取市场价格（单个币种）
    */
   async getMarketPrice(coin: Coin): Promise<number> {
     if (!this.isAvailable()) {
@@ -116,11 +195,36 @@ export class HyperliquidClient {
 
     try {
       const symbol = COIN_TO_SYMBOL[coin];
+      if (!symbol) {
+        throw new Error(`不支持的币种: ${coin}`);
+      }
+      
       const allMids = await this.client.info.getAllMids();
-
       const price = parseFloat(allMids[symbol] || '0');
-      console.log(`[Hyperliquid] 💹 ${coin} 价格: $${price}`);
+      
+      // 只有在实际交易时才打印价格日志，避免日志污染
+      // console.log(`[Hyperliquid] 💹 ${coin} 价格: $${price}`);
 
+      return price;
+    } catch (error) {
+      console.error(`[Hyperliquid] ❌ 获取 ${coin} 价格失败:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 获取任意币种的实时价格（用于交易执行）
+   */
+  async getAnyCoinPrice(coin: Coin): Promise<number> {
+    const symbol = COIN_TO_SYMBOL[coin];
+    if (!symbol) {
+      throw new Error(`不支持的币种: ${coin}`);
+    }
+    
+    try {
+      const allMids = await this.client.info.getAllMids();
+      const price = parseFloat(allMids[symbol] || '0');
+      console.log(`[Hyperliquid] 🎯 获取 ${coin} 交易价格: $${price}`);
       return price;
     } catch (error) {
       console.error(`[Hyperliquid] ❌ 获取 ${coin} 价格失败:`, error);
@@ -145,7 +249,11 @@ export class HyperliquidClient {
 
       const prices: Record<string, number> = {};
 
-      for (const [coin, symbol] of Object.entries(COIN_TO_SYMBOL)) {
+      // 只获取主要6个币种的价格，保持界面简洁
+      const mainCoins = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
+      
+      for (const coin of mainCoins) {
+        const symbol = COIN_TO_SYMBOL[coin as Coin];
         const rawPrice = allMids[symbol];
         const price = parseFloat(rawPrice || '0');
         prices[coin] = price;
@@ -157,7 +265,8 @@ export class HyperliquidClient {
       return prices as Record<Coin, number>;
     } catch (error) {
       console.error('[Hyperliquid] ❌ 获取市场价格失败:', error);
-      throw error;
+      console.warn('[Hyperliquid] ⚠️ API临时不可用，将降级到备用价格源');
+      return null; // 返回null让系统降级到CoinGecko
     }
   }
 
@@ -397,15 +506,40 @@ export class HyperliquidClient {
    * 获取币种精度
    */
   private getPrecision(coin: Coin): number {
+    // 基于Hyperliquid API返回的szDecimals值
     const precisionMap: Record<Coin, number> = {
-      'BTC': 5,   // BTC: 5位小数
-      'ETH': 4,   // ETH: 4位小数
-      'SOL': 2,   // SOL: 2位小数
-      'BNB': 3,   // BNB: 3位小数
-      'DOGE': 0,  // DOGE: 整数
-      'XRP': 0,   // XRP: 整数
+      // 主流币种
+      'BTC': 5,   'ETH': 4,   'SOL': 2,   'BNB': 3,   'DOGE': 0,   'XRP': 0,
+      
+      // L1公链
+      'ATOM': 2,  'AVAX': 2,  'DOT': 1,   'ADA': 0,   'NEAR': 1,  'FIL': 1,
+      'TIA': 1,   'TON': 1,   'SUI': 1,   'APT': 2,   'SEI': 0,   'INJ': 1,
+      
+      // DeFi蓝筹
+      'UNI': 1,   'LINK': 1,  'AAVE': 2,  'CRV': 1,   'LDO': 1,   'PENDLE': 0,
+      'ENS': 2,   'SUSHI': 1,
+      
+      // L2/扩容
+      'OP': 1,    'ARB': 1,   'MATIC': 1, 'LTC': 2,   'BCH': 3,   'ETC': 2,
+      
+      // Meme币热门
+      'kPEPE': 0, 'kSHIB': 0, 'WIF': 0,   'POPCAT': 0,'BOME': 0,  'GOAT': 0,
+      'PNUT': 1,  'PENGU': 0, 'kBONK': 0,
+      
+      // AI概念
+      'AIXBT': 0, 'VIRTUAL': 1,'ZEREBRO': 0,'TAO': 3,  'RENDER': 1,'FET': 0,
+      
+      // 新热点
+      'TRUMP': 1, 'HYPE': 2,  'MOVE': 0,  'ME': 1,    'USUAL': 1, 'MORPHO': 1,
+      
+      // 游戏/NFT
+      'IMX': 1,   'GALA': 0,  'SAND': 0,  'GMT': 0,   'YGG': 0,   'BIGTIME': 0,
+      
+      // 其他热门
+      'JUP': 0,   'PYTH': 0,  'ONDO': 0,  'ENA': 0,   'JTO': 0,   'W': 1,
+      'STRK': 1,  'ETHFI': 1, 'BLAST': 0
     };
-    return precisionMap[coin] || 5;
+    return precisionMap[coin] || 2; // 默认2位小数
   }
 }
 

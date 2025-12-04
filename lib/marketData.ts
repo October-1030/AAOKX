@@ -7,12 +7,32 @@ import { CONFIG } from './config';
 
 // 初始价格（如果使用真实数据会被覆盖）
 const INITIAL_PRICES: Record<Coin, number> = {
-  BTC: 67200,
-  ETH: 3450,
-  SOL: 145,
-  BNB: 580,
-  DOGE: 0.38,
-  XRP: 2.15,
+  // 主流币种 (原有6个)
+  BTC: 67200, ETH: 3450, SOL: 145, BNB: 580, DOGE: 0.38, XRP: 2.15,
+  
+  // L1公链
+  ATOM: 8, AVAX: 40, DOT: 7, ADA: 0.9, NEAR: 5, FIL: 4, TIA: 4.5, TON: 5.5, SUI: 2.8, APT: 9, SEI: 0.3, INJ: 25,
+  
+  // DeFi蓝筹  
+  UNI: 12, LINK: 15, AAVE: 180, CRV: 0.8, LDO: 1.8, PENDLE: 4.5, ENS: 25, SUSHI: 1.2,
+  
+  // L2/扩容
+  OP: 2.5, ARB: 0.8, MATIC: 0.9, LTC: 100, BCH: 450, ETC: 28,
+  
+  // Meme币热门
+  kPEPE: 0.00002, kSHIB: 0.00003, WIF: 1.8, POPCAT: 0.8, BOME: 0.01, GOAT: 0.5, PNUT: 1.2, PENGU: 0.04, kBONK: 0.00004,
+  
+  // AI概念
+  AIXBT: 0.25, VIRTUAL: 2.5, ZEREBRO: 0.15, TAO: 450, RENDER: 7, FET: 1.5,
+  
+  // 新热点
+  TRUMP: 35, HYPE: 28, MOVE: 0.7, ME: 3.5, USUAL: 1.1, MORPHO: 2.8,
+  
+  // 游戏/NFT
+  IMX: 1.5, GALA: 0.04, SAND: 0.6, GMT: 0.15, YGG: 0.5, BIGTIME: 0.15,
+  
+  // 其他热门
+  JUP: 0.8, PYTH: 0.4, ONDO: 1.4, ENA: 0.9, JTO: 2.8, W: 0.3, STRK: 0.5, ETHFI: 3.5, BLAST: 0.02
 };
 
 // 真实价格缓存（从 Hyperliquid/CoinGecko 获取）
@@ -20,15 +40,14 @@ let realPricesCache: Record<Coin, RealTimePrice> | null = null;
 let lastRealPriceFetch = 0;
 const PRICE_FETCH_INTERVAL = 10000; // ✅ 10秒刷新一次（更实时）
 
-// 市场数据存储
-const marketHistory: Record<Coin, CandleStick[]> = {
-  BTC: [],
-  ETH: [],
-  SOL: [],
-  BNB: [],
-  DOGE: [],
-  XRP: [],
-};
+// 市场数据存储 - 只为主要6个币种初始化
+const marketHistory: Record<Coin, CandleStick[]> = {} as Record<Coin, CandleStick[]>;
+
+// 只初始化主要6个币种的历史数据，保持界面简洁  
+const DISPLAY_COINS: Coin[] = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
+DISPLAY_COINS.forEach(coin => {
+  marketHistory[coin] = [];
+});
 
 /**
  * 生成模拟K线数据（随机游走模型）
@@ -71,7 +90,10 @@ export async function initializeMarketData() {
     console.log('[MarketData] 🎲 使用模拟价格数据');
   }
 
-  for (const coin of Object.keys(INITIAL_PRICES) as Coin[]) {
+  // 只初始化主要6个币种的历史数据，保持界面简洁
+  const mainCoins: Coin[] = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
+  
+  for (const coin of mainCoins) {
     const candles: CandleStick[] = [];
 
     // 使用真实价格或默认价格作为目标价格
@@ -121,7 +143,8 @@ async function fetchRealPrices(): Promise<void> {
     return; // 使用缓存
   }
 
-  const coins: Coin[] = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'];
+  // 仅显示主要6个币种，保持界面简洁
+  const coins: Coin[] = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
 
   // 🔥 方案1：优先尝试 Hyperliquid 永续合约价格（和真实交易价格一致）
   try {
@@ -132,9 +155,9 @@ async function fetchRealPrices(): Promise<void> {
       console.log('[MarketData] 🔗 从 Hyperliquid 获取永续合约价格...');
       const hlPrices = await hyperliquid.getAllMarketPrices();
 
-      // 验证价格是否有效（不为0）
-      const btcPrice = hlPrices.BTC;
-      if (btcPrice && btcPrice > 1000) {
+      // 验证价格是否有效（不为null且不为0）
+      if (hlPrices && hlPrices.BTC && hlPrices.BTC > 1000) {
+        const btcPrice = hlPrices.BTC;
         console.log(`[MarketData] ✅ Hyperliquid 价格获取成功`);
         console.log(`[MarketData] 💹 BTC: $${btcPrice.toLocaleString()}`);
 
@@ -271,6 +294,26 @@ export function getMarketData(coin: Coin): MarketData {
         atr_14: fallbackPrice * 0.02,
         volume: 1000000,
         volume_ratio: 1,
+        // 默认线性回归值（无数据时）
+        linear_regression: {
+          slope: 0,
+          intercept: fallbackPrice,
+          rSquared: 0,
+          currentValue: fallbackPrice,
+          deviation: 0,
+          deviationPercent: 0,
+          zScore: 0,
+          signal: 'NEUTRAL' as const,
+          standardDeviation: 0,
+        },
+        // 默认市场状态（无数据时假设震荡）
+        market_regime: {
+          regime: 'RANGING' as const,
+          strength: 50,
+          adx: 0,
+          rSquared: 0,
+          recommendation: 'WAIT' as const,
+        },
       },
       intraday: [],
       daily: [],
@@ -320,7 +363,8 @@ export function getMarketData(coin: Coin): MarketData {
  * 获取所有币种的市场数据
  */
 export function getAllMarketData(): MarketData[] {
-  return (Object.keys(INITIAL_PRICES) as Coin[]).map(coin => getMarketData(coin));
+  // 只返回主要6个币种的市场数据，保持界面简洁
+  return DISPLAY_COINS.map(coin => getMarketData(coin));
 }
 
 /**

@@ -172,6 +172,57 @@ formatPrice(0.5432, "DOGE")          // "$0.5432" (4位小数)
 
 ---
 
+## 📈 技术指标速查
+
+### 传统指标
+
+| 指标 | 周期 | 用途 | 代码位置 |
+|------|------|------|----------|
+| **EMA** | 20, 50, 200 | 趋势识别 | `lib/indicators.ts:15` |
+| **MACD** | 12/26/9 | 动量确认 | `lib/indicators.ts:37` |
+| **RSI** | 7, 14 | 超买超卖 | `lib/indicators.ts:69` |
+| **ATR** | 3, 14 | 波动性 | `lib/indicators.ts:107` |
+
+### 均值回归指标 (NEW!)
+
+| 指标 | 计算方法 | 解读 | 代码位置 |
+|------|----------|------|----------|
+| **Z-Score** | (价格 - 均值) / 标准差 | ±2 = 极端 | `lib/indicators.ts:198` |
+| **Linear Regression** | 20 周期最小二乘法 | R² > 0.7 = 强趋势 | `lib/indicators.ts:198` |
+| **ADX** | 14 周期方向指数 | > 25 = 趋势，< 20 = 震荡 | `lib/indicators.ts:299` |
+| **Market Regime** | ADX + R² 组合 | RANGING / TRENDING | `lib/indicators.ts:299` |
+
+### 快速判断
+
+```typescript
+// 检查极端超买/超卖
+if (indicators.linear_regression.zScore < -2) {
+  // 极度超卖 - 考虑做多（仅限震荡市场）
+}
+
+// 检查市场状态
+if (indicators.market_regime.regime === 'RANGING') {
+  // 震荡市场 - 使用均值回归策略
+} else if (indicators.market_regime.regime === 'TRENDING') {
+  // 趋势市场 - 使用趋势跟踪策略
+}
+
+// 完整的均值回归做多设置
+if (
+  indicators.linear_regression.zScore < -2 &&
+  indicators.rsi_14 < 30 &&
+  indicators.market_regime.regime === 'RANGING' &&
+  indicators.volume_ratio > 1.0
+) {
+  // ✅ 高概率均值回归机会
+  action = 'buy_to_enter';
+}
+```
+
+📖 **[完整均值回归策略指南 →](MEAN_REVERSION_GUIDE.md)**
+
+---
+
 ## 🎯 三层提示词系统
 
 ### 生成提示词
@@ -381,10 +432,11 @@ A: 检查传入的值是否为有效数字，使用 `Number()` 进行类型转�
 
 ## 📚 相关文档
 
+- [README.md](./README.md) - 项目介绍
+- [MEAN_REVERSION_GUIDE.md](./MEAN_REVERSION_GUIDE.md) - 均值回归策略指南 (NEW!)
+- [REAL_DATA_GUIDE.md](./REAL_DATA_GUIDE.md) - 真实数据集成指南
 - [PROJECT_COMPARISON.md](./PROJECT_COMPARISON.md) - 项目对比分析
 - [UPGRADE_SUMMARY.md](./UPGRADE_SUMMARY.md) - 升级总结
-- [README.md](./README.md) - 项目介绍
-- [REAL_DATA_GUIDE.md](./REAL_DATA_GUIDE.md) - 真实数据集成指南
 
 ---
 
@@ -398,4 +450,4 @@ A: 检查传入的值是否为有效数字，使用 `Number()` 进行类型转�
 
 ---
 
-**最后更新**：2025-10-27
+**最后更新**：2025-11-25

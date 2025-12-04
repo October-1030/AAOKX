@@ -58,12 +58,12 @@ export function calculateTradingLimits(balance: number): TradingLimits {
     };
   } else if (balance < 200) {
     // 中等账户：$50-200
-    console.log('[TradingConfig] 💵 中等模式');
+    console.log('[TradingConfig] 💵 中等模式（安全设置）');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.2, 40), // ✅ 降低至 20%
-      maxPositionPercent: 20,
-      maxLeverage: 3, // ✅ 降低至 3x
+      maxPositionSize: Math.min(balance * 0.08, 25), // 🔥 修复：降低至 8%（更安全）
+      maxPositionPercent: 8,
+      maxLeverage: 2, // 🔥 修复：降低至 2x（超安全）
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],
       minOrderSize: {
         BTC: 10,
@@ -76,12 +76,12 @@ export function calculateTradingLimits(balance: number): TradingLimits {
     };
   } else {
     // 大额账户：$200+
-    console.log('[TradingConfig] 💎 标准模式');
+    console.log('[TradingConfig] 💎 标准模式（超安全设置）');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.15, 1500), // ✅ 降低至 15%（更保守）
-      maxPositionPercent: 15,
-      maxLeverage: 10, // ✅ 降低至 10x（避免过度杠杆）
+      maxPositionSize: Math.min(balance * 0.05, 150), // 🔥 修复：降低至 5%（超安全）
+      maxPositionPercent: 5,
+      maxLeverage: 3, // 🔥 修复：降低至 3x（最大安全）
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],
       minOrderSize: {
         BTC: 10,

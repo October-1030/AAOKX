@@ -45,11 +45,25 @@ async function startTradingLoop() {
   const engine = initializeEngine();
 
   // ✅ 确保市场数据在第一次执行前已初始化
-  try {
-    await getMarketData();
-    console.log('✅ Market data initialized for trading loop');
-  } catch (error) {
-    console.error('❌ Failed to initialize market data:', error);
+  // 尝试最多3次初始化市场数据
+  let initSuccess = false;
+  for (let i = 0; i < 3; i++) {
+    try {
+      await getMarketData();
+      console.log('✅ Market data initialized for trading loop');
+      initSuccess = true;
+      break;
+    } catch (error) {
+      console.error(`❌ Failed to initialize market data (attempt ${i + 1}/3):`, error);
+      if (i < 2) {
+        console.log('🔄 Retrying in 5 seconds...');
+        await new Promise(resolve => setTimeout(resolve, 5000));
+      }
+    }
+  }
+  
+  if (!initSuccess) {
+    console.error('❌ Failed to initialize market data after 3 attempts, stopping...');
     isRunning = false;
     return;
   }

@@ -15,13 +15,13 @@
  */
 
 import { config } from 'dotenv';
-import { callDeepSeek, testDeepSeekConnection } from './lib/deepseekClient';
+import { callDeepSeek, testDeepSeekConnection } from './lib/deepseekClient.js';
 import {
   generateNOF1SystemPrompt,
   generateNOF1UserPrompt,
   parseNOF1Response,
-} from './lib/tradingPromptNOF1';
-import { AccountStatus, MarketData } from './types/trading';
+} from './lib/tradingPromptNOF1.js';
+import { AccountStatus, MarketData } from './types/trading.js';
 
 // 加载环境变量
 config({ path: '.env.local' });
@@ -99,6 +99,24 @@ console.log('==========================================\n');
           atr_14: 1456.78,
           volume: 123400000,
           volume_ratio: 1.07,
+          linear_regression: {
+            slope: 5.2,
+            intercept: 66500,
+            rSquared: 0.85,
+            currentValue: 67100,
+            deviation: 134.56,
+            deviationPercent: 0.2,
+            zScore: 0.5,
+            signal: 'NEUTRAL' as const,
+            standardDeviation: 268.5,
+          },
+          market_regime: {
+            regime: 'TRENDING' as const,
+            strength: 75,
+            adx: 28.5,
+            rSquared: 0.85,
+            recommendation: 'TREND_FOLLOWING' as const,
+          },
         },
         intraday: Array.from({ length: 10 }, (_, i) => ({
           timestamp: Date.now() - (10 - i) * 600000,

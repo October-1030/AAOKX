@@ -28,10 +28,10 @@ export default function TradingBot() {
   const marketData = data?.marketData || [];
 
   // ✅ 优先使用真实Hyperliquid账户数据
-  const accountValue = hlAccount?.accountValue || 0;
-  const withdrawable = hlAccount?.withdrawable || 0;
-  const realPositions = hlAccount?.assetPositions || [];
-  const marginUsed = hlAccount?.marginUsed || 0;
+  const accountValue = hlAccount?.account?.accountValue || hlAccount?.accountValue || 0;
+  const withdrawable = hlAccount?.account?.withdrawable || hlAccount?.withdrawable || 0;
+  const realPositions = hlAccount?.positions || hlAccount?.assetPositions || [];
+  const marginUsed = hlAccount?.account?.marginUsed || hlAccount?.marginUsed || 0;
 
   // 计算真实回报率（基于起始$1000）
   const REAL_INITIAL_CAPITAL = 1000;
@@ -192,9 +192,16 @@ export default function TradingBot() {
           <div className="p-6">
             {realPositions.length > 0 ? (
               <div className="space-y-3">
-                {realPositions.map((asset: any, index: number) => {
-                  const pos = asset.position;
-                  const isLong = parseFloat(pos.szi) > 0;
+                {realPositions.map((pos: any, index: number) => {
+                  // Handle both flat structure (from our API) and nested structure (raw Hyperliquid)
+                  const position = pos.position || pos;
+                  const isLong = (position.size || parseFloat(position.szi || '0')) > 0;
+                  const leverage = position.leverage || (position.leverage?.value ? parseFloat(position.leverage.value) : 1);
+                  const size = position.size || parseFloat(position.szi || '0');
+                  const entryPrice = position.entryPrice || parseFloat(position.entryPx || '0');
+                  const unrealizedPnL = position.unrealizedPnL || parseFloat(position.unrealizedPnl || '0');
+                  const roe = position.returnOnEquity || (unrealizedPnL / (entryPrice * Math.abs(size))) * 100 || 0;
+
                   return (
                     <div
                       key={index}
@@ -207,28 +214,28 @@ export default function TradingBot() {
                       <div className="flex justify-between items-start">
                         <div>
                           <div className="text-lg font-bold">
-                            {pos.coin} {isLong ? '🟢 LONG' : '🔴 SHORT'} {pos.leverage.value}x
+                            {position.coin} {isLong ? '🟢 LONG' : '🔴 SHORT'} {leverage}x
                           </div>
                           <div className="text-sm text-gray-400 mt-1">
-                            Size: {Math.abs(parseFloat(pos.szi)).toFixed(4)} | Entry: ${parseFloat(pos.entryPx).toFixed(2)}
+                            Size: {Math.abs(size).toFixed(4)} | Entry: ${entryPrice.toFixed(2)}
                           </div>
                         </div>
                         <div className="text-right">
                           <div className={`text-xl font-bold ${
-                            parseFloat(pos.unrealizedPnl) >= 0 ? 'text-green-400' : 'text-red-400'
+                            unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
                           }`}>
-                            {parseFloat(pos.unrealizedPnl) >= 0 ? '+' : ''}${parseFloat(pos.unrealizedPnl).toFixed(2)}
+                            {unrealizedPnL >= 0 ? '+' : ''}${unrealizedPnL.toFixed(2)}
                           </div>
                           <div className={`text-sm ${
-                            pos.returnOnEquity >= 0 ? 'text-green-400' : 'text-red-400'
+                            roe >= 0 ? 'text-green-400' : 'text-red-400'
                           }`}>
-                            ROE: {(pos.returnOnEquity * 100).toFixed(2)}%
+                            ROE: {roe.toFixed(2)}%
                           </div>
                         </div>
                       </div>
-                      {pos.cumFunding && (
+                      {position.cumFunding && (
                         <div className="text-xs text-gray-500 mt-2">
-                          Funding: ${pos.cumFunding.sinceOpen?.toFixed(2) || '0.00'}
+                          Funding: ${(position.cumFunding.sinceOpen || 0).toFixed(2)}
                         </div>
                       )}
                     </div>

@@ -1,6 +1,24 @@
 // 核心交易类型定义
 
-export type Coin = 'BTC' | 'ETH' | 'SOL' | 'BNB' | 'DOGE' | 'XRP';
+export type Coin = 
+  // 主流币种 (原有6个)
+  'BTC' | 'ETH' | 'SOL' | 'BNB' | 'DOGE' | 'XRP' | 
+  // L1公链
+  'ATOM' | 'AVAX' | 'DOT' | 'ADA' | 'NEAR' | 'FIL' | 'TIA' | 'TON' | 'SUI' | 'APT' | 'SEI' | 'INJ' |
+  // DeFi蓝筹
+  'UNI' | 'LINK' | 'AAVE' | 'CRV' | 'LDO' | 'PENDLE' | 'ENS' | 'SUSHI' |
+  // L2/扩容
+  'OP' | 'ARB' | 'MATIC' | 'LTC' | 'BCH' | 'ETC' |
+  // Meme币热门
+  'kPEPE' | 'kSHIB' | 'WIF' | 'POPCAT' | 'BOME' | 'GOAT' | 'PNUT' | 'PENGU' | 'kBONK' |
+  // AI概念
+  'AIXBT' | 'VIRTUAL' | 'ZEREBRO' | 'TAO' | 'RENDER' | 'FET' |
+  // 新热点
+  'TRUMP' | 'HYPE' | 'MOVE' | 'ME' | 'USUAL' | 'MORPHO' |
+  // 游戏/NFT
+  'IMX' | 'GALA' | 'SAND' | 'GMT' | 'YGG' | 'BIGTIME' |
+  // 其他热门
+  'JUP' | 'PYTH' | 'ONDO' | 'ENA' | 'JTO' | 'W' | 'STRK' | 'ETHFI' | 'BLAST';
 
 export type TradeSide = 'LONG' | 'SHORT';
 
@@ -23,6 +41,28 @@ export interface TechnicalIndicators {
   atr_14: number;       // 14周期 ATR（中期波动）
   volume: number;
   volume_ratio: number;
+
+  // 线性回归分析（均值回归策略）
+  linear_regression: {
+    slope: number;                // 趋势斜率
+    intercept: number;            // 回归线起点
+    rSquared: number;             // 拟合优度 (0-1)
+    currentValue: number;         // 回归线预测值
+    deviation: number;            // 偏离度（美元）
+    deviationPercent: number;     // 偏离度（百分比）
+    zScore: number;               // 标准化偏离度
+    signal: 'OVERBOUGHT' | 'OVERSOLD' | 'NEUTRAL'; // 交易信号
+    standardDeviation?: number;   // 标准差
+  };
+
+  // 市场状态识别（震荡 vs 趋势）
+  market_regime: {
+    regime: 'RANGING' | 'TRENDING';  // 市场状态
+    strength: number;                 // 状态强度 (0-100)
+    adx: number;                      // ADX指标值
+    rSquared?: number;                // 线性回归R²
+    recommendation: 'MEAN_REVERSION' | 'TREND_FOLLOWING' | 'WAIT'; // 策略推荐
+  };
 }
 
 export interface CandleData {

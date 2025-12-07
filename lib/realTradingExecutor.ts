@@ -1,9 +1,10 @@
 /**
  * 真实交易执行器
- * 使用 Hyperliquid API 执行真实订单
+ * 支持 Hyperliquid 和 OKX 交易所
  */
 
 import { getHyperliquidClient } from './hyperliquidClient';
+import { getOKXClient } from './okxClient';
 import { getCoinGlassClient } from './coinglassClient';
 import {
   calculateTradingLimits,
@@ -13,14 +14,18 @@ import {
 } from './tradingConfig';
 import { Coin, Position, TradingDecision } from '@/types/trading';
 
+export type Exchange = 'hyperliquid' | 'okx';
+
 export interface RealTradingExecutorConfig {
   dryRun: boolean; // 模拟模式（不执行真实订单）
   enableRiskChecks: boolean; // 启用风险检查
   maxDailyTrades: number; // 每日最大交易次数
+  exchange: Exchange; // 交易所选择
 }
 
 export class RealTradingExecutor {
   private hyperliquid = getHyperliquidClient();
+  private okx = getOKXClient();
   private coinglass = getCoinGlassClient();
   private config: RealTradingExecutorConfig;
   private dailyTradeCount: number = 0;
@@ -33,9 +38,11 @@ export class RealTradingExecutor {
       dryRun: config.dryRun ?? true, // 默认模拟模式
       enableRiskChecks: config.enableRiskChecks ?? true,
       maxDailyTrades: config.maxDailyTrades ?? 150, // 每日最大150次交易（3分钟周期 × 24小时）
+      exchange: config.exchange ?? 'okx', // 默认使用OKX
     };
 
     console.log('[RealTrading] 🚀 初始化真实交易执行器');
+    console.log(`[RealTrading] 交易所: ${this.config.exchange.toUpperCase()}`);
     console.log(`[RealTrading] 模式: ${this.config.dryRun ? '模拟' : '真实交易'}`);
 
     this.resetDailyCounter();
@@ -58,15 +65,27 @@ export class RealTradingExecutor {
    */
   async getAccountLimits() {
     try {
-      if (!this.hyperliquid.isAvailable()) {
-        console.warn('[RealTrading] ⚠️ Hyperliquid 未配置，使用默认限制');
-        return calculateTradingLimits(10000); // 默认 $10,000
+      let balance: number;
+
+      if (this.config.exchange === 'okx') {
+        if (!this.okx.isAvailable()) {
+          console.warn('[RealTrading] ⚠️ OKX 未配置，使用默认限制');
+          return calculateTradingLimits(1000); // 默认 $1,000
+        }
+
+        const accountInfo = await this.okx.getAccountInfo();
+        balance = parseFloat(accountInfo.totalEq || '0');
+      } else {
+        if (!this.hyperliquid.isAvailable()) {
+          console.warn('[RealTrading] ⚠️ Hyperliquid 未配置，使用默认限制');
+          return calculateTradingLimits(10000); // 默认 $10,000
+        }
+
+        const accountInfo = await this.hyperliquid.getAccountInfo();
+        balance = accountInfo.accountValue;
       }
 
-      const accountInfo = await this.hyperliquid.getAccountInfo();
-      const balance = accountInfo.accountValue;
-
-      console.log(`[RealTrading] 💰 账户余额: $${balance.toFixed(2)}`);
+      console.log(`[RealTrading] 💰 ${this.config.exchange.toUpperCase()} 账户余额: $${balance.toFixed(2)}`);
 
       const limits = calculateTradingLimits(balance);
       const warnings = getRiskWarnings(limits);
@@ -76,7 +95,7 @@ export class RealTradingExecutor {
       return limits;
     } catch (error) {
       console.error('[RealTrading] ❌ 获取账户限制失败:', error);
-      return calculateTradingLimits(10000); // 降级到默认值
+      return calculateTradingLimits(this.config.exchange === 'okx' ? 1000 : 10000); // 降级到默认值
     }
   }
 
@@ -138,7 +157,7 @@ export class RealTradingExecutor {
           return await this.executeOpenPosition(decision, limits, 'SHORT');
 
         case 'close':
-          return await this.executeClosePosition(decision);
+          return await this.executeClosePosition(decision, currentPositions);
 
         default:
           console.log(`[RealTrading] ⚠️ 未知动作: ${decision.action}`);
@@ -162,11 +181,17 @@ export class RealTradingExecutor {
     const { getCurrentPrice } = await import('./marketData');
     const { perfectStrategy } = await import('./perfectTradingStrategy');
     const { trailingStopSystem } = await import('./trailingStopSystem');
-    
+
     let closedCount = 0;
     const closeReasons: string[] = [];
+    const closedCoins = new Set<string>(); // 记录已平仓的币种
 
     for (const position of positions) {
+      // 跳过已经平仓的币种
+      if (closedCoins.has(position.coin)) {
+        console.log(`[RealTrading] ⏭️ ${position.coin} 已平仓，跳过`);
+        continue;
+      }
       const currentPrice = getCurrentPrice(position.coin);
       
       // 🎯 使用Perfect Trading Strategy进行智能止损决策
@@ -214,11 +239,12 @@ export class RealTradingExecutor {
             stopLoss: currentPrice,
             takeProfit: currentPrice,
           },
-        });
+        }, positions);
 
         if (closeResult.success) {
           closedCount++;
           closeReasons.push(`${position.coin}: ${strategyDecision.reason}`);
+          closedCoins.add(position.coin); // 标记为已平仓
           console.log(`[RealTrading] ✅ ${position.coin} 平仓成功 - Perfect Strategy`);
         } else {
           console.error(`[RealTrading] ❌ ${position.coin} 平仓失败:`, closeResult.message);
@@ -248,11 +274,12 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          });
+          }, positions);
 
           if (closeResult.success) {
             closedCount++;
             closeReasons.push(`${position.coin} Emergency Stop Loss (${currentProfit.toFixed(2)}%)`);
+            closedCoins.add(position.coin); // 标记为已平仓
           }
           continue;
         }
@@ -272,11 +299,12 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          });
+          }, positions);
 
           if (closeResult.success) {
             closedCount++;
             closeReasons.push(`${position.coin} Emergency Stop Loss (${currentProfit.toFixed(2)}%)`);
+            closedCoins.add(position.coin); // 标记为已平仓
           }
           continue;
         }
@@ -299,11 +327,12 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          });
+          }, positions);
 
           if (closeResult.success) {
             closedCount++;
             closeReasons.push(`${position.coin} Emergency Take Profit (+${currentProfit.toFixed(2)}%)`);
+            closedCoins.add(position.coin); // 标记为已平仓
           }
           continue;
         }
@@ -323,11 +352,12 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          });
+          }, positions);
 
           if (closeResult.success) {
             closedCount++;
             closeReasons.push(`${position.coin} Emergency Take Profit (+${Math.abs(currentProfit).toFixed(2)}%)`);
+            closedCoins.add(position.coin); // 标记为已平仓
           }
           continue;
         }
@@ -352,11 +382,12 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        });
+        }, positions);
 
         if (closeResult.success) {
           closedCount++;
           closeReasons.push(`${position.coin} Stop Loss (-${Math.abs(position.unrealizedPnLPercent || 0).toFixed(2)}%)`);
+          closedCoins.add(position.coin); // 标记为已平仓
         }
         continue;
       }
@@ -373,11 +404,12 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        });
+        }, positions);
 
         if (closeResult.success) {
           closedCount++;
           closeReasons.push(`${position.coin} Take Profit (+${position.unrealizedPnLPercent?.toFixed(2)}%)`);
+          closedCoins.add(position.coin); // 标记为已平仓
         }
         continue;
       }
@@ -394,11 +426,12 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        });
+        }, positions);
 
         if (closeResult.success) {
           closedCount++;
           closeReasons.push(`${position.coin} Stop Loss (-${Math.abs(position.unrealizedPnLPercent || 0).toFixed(2)}%)`);
+          closedCoins.add(position.coin); // 标记为已平仓
         }
         continue;
       }
@@ -415,11 +448,12 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        });
+        }, positions);
 
         if (closeResult.success) {
           closedCount++;
           closeReasons.push(`${position.coin} Take Profit (+${position.unrealizedPnLPercent?.toFixed(2)}%)`);
+          closedCoins.add(position.coin); // 标记为已平仓
         }
         continue;
       }
@@ -493,11 +527,13 @@ export class RealTradingExecutor {
 
     // 真实交易
     try {
+      const client = this.config.exchange === 'okx' ? this.okx : this.hyperliquid;
+
       // 先设置杠杆
-      await this.hyperliquid.setLeverage(coin, leverage);
+      await client.setLeverage(coin, leverage);
 
       // 下市价单
-      const order = await this.hyperliquid.placeMarketOrder({
+      const order = await client.placeMarketOrder({
         coin,
         side,
         size: adjustedSizeInUsd,
@@ -530,16 +566,24 @@ export class RealTradingExecutor {
   }
 
   /**
-   * 平仓
+   * 平仓（支持现货和期货）
    */
-  private async executeClosePosition(decision: TradingDecision) {
+  private async executeClosePosition(decision: TradingDecision, currentPositions?: Position[]) {
     const { coin } = decision;
 
     if (!coin) {
       return { success: false, message: 'Missing coin parameter' };
     }
 
-    console.log(`[RealTrading] 🔄 平仓: ${coin}`);
+    // 查找当前持仓信息
+    const position = currentPositions?.find(p => p.coin === coin);
+    const isSpot = position && (position as any).isSpot === true;
+
+    console.log(`[RealTrading] 🔄 平仓: ${coin} (${isSpot ? '现货' : '期货'})`);
+
+    if (isSpot && position) {
+      console.log(`[RealTrading] 💼 现货卖出: ${position.size.toFixed(4)} ${coin} @ 市价`);
+    }
 
     // 模拟模式
     if (this.config.dryRun) {
@@ -547,13 +591,26 @@ export class RealTradingExecutor {
       this.dailyTradeCount++;
       return {
         success: true,
-        message: `[DRY RUN] Close ${coin}`,
+        message: `[DRY RUN] Close ${coin} (${isSpot ? 'SPOT' : 'FUTURES'})`,
       };
     }
 
     // 真实交易
     try {
-      const result = await this.hyperliquid.closePosition(coin);
+      const client = this.config.exchange === 'okx' ? this.okx : this.hyperliquid;
+
+      let result;
+      if (isSpot && position) {
+        // ✅ 现货平仓：使用市价卖单
+        if (this.config.exchange === 'okx') {
+          result = await this.okx.closeSpotPosition(coin, position.size);
+        } else {
+          throw new Error('Hyperliquid 不支持现货交易');
+        }
+      } else {
+        // ✅ 期货平仓：使用合约平仓API
+        result = await client.closePosition(coin);
+      }
 
       this.dailyTradeCount++;
 
@@ -563,10 +620,10 @@ export class RealTradingExecutor {
         console.log(`[RealTrading] 🗑️ 删除 ${coin} exitPlan`);
       }
 
-      console.log('[RealTrading] ✅ 平仓成功');
+      console.log(`[RealTrading] ✅ 平仓成功 (${isSpot ? '现货卖出' : '期货平仓'})`);
       return {
         success: true,
-        message: `Closed ${coin}`,
+        message: `Closed ${coin} (${isSpot ? 'SPOT' : 'FUTURES'})`,
       };
     } catch (error) {
       console.error('[RealTrading] ❌ 平仓失败:', error);
@@ -590,13 +647,16 @@ export class RealTradingExecutor {
    * 获取当前持仓
    */
   async getCurrentPositions(): Promise<Position[]> {
-    if (this.config.dryRun || !this.hyperliquid.isAvailable()) {
-      console.log('[RealTrading] 📊 模拟模式/未配置 - 返回空持仓');
+    const isAvailable = this.config.exchange === 'okx' ? this.okx.isAvailable() : this.hyperliquid.isAvailable();
+
+    if (this.config.dryRun || !isAvailable) {
+      console.log(`[RealTrading] 📊 模拟模式/${this.config.exchange.toUpperCase()}未配置 - 返回空持仓`);
       return [];
     }
 
     try {
-      const positions = await this.hyperliquid.getPositions();
+      const client = this.config.exchange === 'okx' ? this.okx : this.hyperliquid;
+      const positions = await client.getPositions();
       const { getCurrentPrice } = await import('./marketData');
 
       return positions.map((p: any) => {

@@ -42,6 +42,9 @@ Timeframes note: Unless stated otherwise in a section title, intraday series are
     const linReg = current.linear_regression;
     const regime = current.market_regime;
 
+    // 🔍 调试：打印技术指标
+    console.log(`[PromptGen] 📊 ${coin} 技术指标: RSI=${current.rsi_14.toFixed(2)}, MACD=${current.macd.toFixed(4)}, ADX=${regime.adx.toFixed(2)}, Regime=${regime.regime}, Price=$${current.price.toFixed(2)}`);
+
     prompt += `=== ALL ${coin} DATA ===
 current_price = ${current.price.toFixed(2)}, current_ema20 = ${current.ema_20.toFixed(2)}, current_macd = ${current.macd.toFixed(4)}, current_rsi (7 period) = ${current.rsi_7.toFixed(2)}
 
@@ -94,7 +97,13 @@ Current Account Value: ${totalEquity.toFixed(2)}
   if (positions.length > 0) {
     prompt += `Current live positions & performance:\n`;
     positions.forEach(pos => {
-      prompt += `{'symbol': '${pos.coin}', 'quantity': ${pos.side === 'LONG' ? '+' : '-'}${Math.abs(pos.notional / pos.entryPrice).toFixed(4)}, 'entry_price': ${pos.entryPrice.toFixed(2)}, 'current_price': ${pos.currentPrice.toFixed(2)}, 'liquidation_price': ${pos.liquidationPrice.toFixed(2)}, 'unrealized_pnl': ${pos.unrealizedPnL.toFixed(2)}, 'leverage': ${pos.leverage}, 'exit_plan': {'invalidation_condition': '${pos.exitPlan.invalidation}', 'profit_target': ${pos.exitPlan.takeProfit.toFixed(2)}, 'stop_loss': ${pos.exitPlan.stopLoss.toFixed(2)}}, 'confidence': 75, 'risk_usd': ${Math.abs(pos.unrealizedPnL).toFixed(2)}, 'notional_usd': ${pos.notional.toFixed(2)}}\n`;
+      const quantity = pos.entryPrice > 0 ? Math.abs(pos.notional / pos.entryPrice) : pos.size || 0;
+      const liqPrice = pos.liquidationPrice || 0;
+      const stopLoss = pos.exitPlan?.stopLoss || 0;
+      const takeProfit = pos.exitPlan?.takeProfit || 0;
+      const invalidation = pos.exitPlan?.invalidation || 'No exit plan set';
+
+      prompt += `{'symbol': '${pos.coin}', 'quantity': ${pos.side === 'LONG' ? '+' : '-'}${quantity.toFixed(4)}, 'entry_price': ${pos.entryPrice.toFixed(2)}, 'current_price': ${pos.currentPrice.toFixed(2)}, 'liquidation_price': ${liqPrice.toFixed(2)}, 'unrealized_pnl': ${pos.unrealizedPnL.toFixed(2)}, 'leverage': ${pos.leverage}, 'exit_plan': {'invalidation_condition': '${invalidation}', 'profit_target': ${takeProfit.toFixed(2)}, 'stop_loss': ${stopLoss.toFixed(2)}}, 'confidence': 75, 'risk_usd': ${Math.abs(pos.unrealizedPnL).toFixed(2)}, 'notional_usd': ${pos.notional.toFixed(2)}}\n`;
     });
   } else {
     prompt += `No active positions.\n`;
@@ -191,7 +200,7 @@ Match leverage to your confidence score (0-1 scale):
 **Critical Rules**:
 - ⚠️ **HARD CAP**: Never exceed 10x leverage regardless of confidence
 - **Lower confidence = Lower leverage**: This is NON-NEGOTIABLE
-- Confidence < 0.6 → Do NOT enter (use "hold" instead)
+- Confidence < 0.5 → Do NOT enter (use "hold" instead)  // 🔧 降低至 50%（更实用）
 - When in doubt, default to 2x-3x leverage
 
 ---
@@ -204,11 +213,11 @@ Match leverage to your confidence score (0-1 scale):
 - Example: $10,000 account -> Max $200 risk per trade
 - ⚠️ **CRITICAL**: This is a HARD LIMIT. Trades violating this will be rejected.
 
-### 2. **Minimum Risk-Reward Ratio: 3:1** (IMPROVED)
-- Profit target must be AT LEAST 3x the risk (raised from 2:1)
-- Example: If stop loss risks $100, take profit must gain >= $300
-- Formula: \`(takeProfit - entry) >= 3 * (entry - stopLoss)\` for longs
-- This ensures only high-quality setups are traded
+### 2. **Minimum Risk-Reward Ratio: 1.5:1** (BALANCED)
+- Profit target must be AT LEAST 1.5x the risk (balanced for crypto volatility)
+- Example: If stop loss risks $100, take profit must gain >= $150
+- Formula: \`(takeProfit - entry) >= 1.5 * (entry - stopLoss)\` for longs
+- This captures more realistic trading opportunities while maintaining positive expectancy
 
 ### 3. **Exit Plan Requirements**
 Every trade MUST specify:
@@ -237,14 +246,16 @@ Every trade MUST specify:
 - ❌ **NO Analysis Paralysis**: Make decisions, don't overthink
 - ❌ **NO Overleveraging**: Respect confidence-based leverage table
 - ❌ **NO Trading Without Confirmation**: Minimum 2+ indicators must align
-- ❌ **NO Weak Setups**: If confidence < 0.6, use "hold" instead
+- ❌ **NO Weak Setups**: If confidence < 0.5, use "hold" instead  // 🔧 降低至 50%
 
-**Conservative Entry Requirements** (ALL must be met):
+**Balanced Entry Requirements** (2-3 indicators should align):
 1. **Trend Confirmation**: Price must be above EMA20 for longs (below for shorts)
 2. **Momentum Alignment**: MACD must confirm direction
 3. **RSI Validation**: Not in extreme zones unless reversal is clear
 4. **Volume Support**: Current volume > average (no low-liquidity entries)
-5. **Confidence Threshold**: Minimum 0.6 confidence to enter new positions
+5. **Confidence Threshold**: Minimum 0.5 confidence to enter new positions  // 🔧 降低至 50%
+
+**Note**: You do NOT need all 5 indicators to align. If 2-3 strong signals agree, that is sufficient for entry.
 
 ---
 
@@ -477,10 +488,10 @@ Use thinking-out-loud style:
 **Validation Rules:**
 - For LONG: \`takeProfit > entryPrice > stopLoss\`
 - For SHORT: \`stopLoss > entryPrice > takeProfit\`
-- Profit/Risk Ratio: \`(takeProfit - entry) ≥ 3 × (entry - stopLoss)\` for longs (IMPROVED to 3:1)
+- Profit/Risk Ratio: \`(takeProfit - entry) ≥ 1.5 × (entry - stopLoss)\` for longs  // 🔧 改为 1.5:1（更实用）
 - Risk per trade: \`≤ 2% of account equity\` (TIGHTENED from 3%)
-- Leverage caps: 0.6-0.7 → 2-3x, 0.7-0.8 → 3-5x, 0.8-0.9 → 5-8x, 0.9-1.0 → 8-10x (MAX)
-- Minimum confidence to enter: 0.6 (below this, use "hold")
+- Leverage caps: 0.5-0.6 → 2x, 0.6-0.7 → 2-3x, 0.7-0.8 → 3-5x, 0.8-0.9 → 5-8x, 0.9-1.0 → 8-10x (MAX)
+- Minimum confidence to enter: 0.5 (below this, use "hold")  // 🔧 降低至 50%
 
 **CRITICAL**: Be consistent with your Chain of Thought reasoning!
 `;

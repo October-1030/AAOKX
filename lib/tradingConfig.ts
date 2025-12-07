@@ -76,12 +76,12 @@ export function calculateTradingLimits(balance: number): TradingLimits {
     };
   } else {
     // 大额账户：$200+
-    console.log('[TradingConfig] 💎 标准模式（超安全设置）');
+    console.log('[TradingConfig] 💎 平衡模式（适中风险）');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.05, 150), // 🔥 修复：降低至 5%（超安全）
-      maxPositionPercent: 5,
-      maxLeverage: 3, // 🔥 修复：降低至 3x（最大安全）
+      maxPositionSize: Math.min(balance * 0.15, 200), // ⚖️ 平衡设置：15%仓位
+      maxPositionPercent: 15,
+      maxLeverage: 5, // ⚖️ 平衡设置：5x杠杆（安全且有效）
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],
       minOrderSize: {
         BTC: 10,

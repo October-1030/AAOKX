@@ -6,12 +6,13 @@ import { getAllCoinGeckoPrices, RealTimePrice } from './coingeckoClient';
 import { CONFIG } from './config';
 
 // 初始价格（如果使用真实数据会被覆盖）
+// 🔥 已更新至 2025年12月当前市场价格
 const INITIAL_PRICES: Record<Coin, number> = {
   // 主流币种 (原有6个)
-  BTC: 67200, ETH: 3450, SOL: 145, BNB: 580, DOGE: 0.38, XRP: 2.15,
+  BTC: 91000, ETH: 3125, SOL: 135, BNB: 900, DOGE: 0.14, XRP: 2.15,
   
   // L1公链
-  ATOM: 8, AVAX: 40, DOT: 7, ADA: 0.9, NEAR: 5, FIL: 4, TIA: 4.5, TON: 5.5, SUI: 2.8, APT: 9, SEI: 0.3, INJ: 25,
+  ATOM: 8, AVAX: 13.8, DOT: 7, ADA: 0.9, NEAR: 5, FIL: 4, TIA: 4.5, TON: 5.5, SUI: 2.8, APT: 9, SEI: 0.3, INJ: 25,
   
   // DeFi蓝筹  
   UNI: 12, LINK: 15, AAVE: 180, CRV: 0.8, LDO: 1.8, PENDLE: 4.5, ENS: 25, SUSHI: 1.2,
@@ -40,23 +41,41 @@ let realPricesCache: Record<Coin, RealTimePrice> | null = null;
 let lastRealPriceFetch = 0;
 const PRICE_FETCH_INTERVAL = 10000; // ✅ 10秒刷新一次（更实时）
 
+// 市场趋势类型
+type MarketTrend = 'BULLISH' | 'BEARISH' | 'RANGING';
+
 // 市场数据存储 - 只为主要6个币种初始化
 const marketHistory: Record<Coin, CandleStick[]> = {} as Record<Coin, CandleStick[]>;
 
-// 只初始化主要6个币种的历史数据，保持界面简洁  
+// 每个币种的当前趋势
+const coinTrends: Record<Coin, MarketTrend> = {} as Record<Coin, MarketTrend>;
+
+// 只初始化主要6个币种的历史数据，保持界面简洁
 const DISPLAY_COINS: Coin[] = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
 DISPLAY_COINS.forEach(coin => {
   marketHistory[coin] = [];
+  // 随机分配趋势：40% 牛市, 40% 震荡, 20% 熊市
+  const rand = Math.random();
+  if (rand < 0.4) coinTrends[coin] = 'BULLISH';
+  else if (rand < 0.8) coinTrends[coin] = 'RANGING';
+  else coinTrends[coin] = 'BEARISH';
 });
 
 /**
- * 生成模拟K线数据（随机游走模型）
+ * 生成模拟K线数据（支持趋势）
  */
-function generateCandle(lastClose: number, volatility = 0.02): CandleStick {
+function generateCandle(lastClose: number, volatility = 0.02, trend: MarketTrend = 'RANGING'): CandleStick {
   const timestamp = Date.now();
 
-  // 随机游走
-  const changePercent = (Math.random() - 0.5) * 2 * volatility;
+  // 根据趋势调整价格变化
+  let drift = 0;
+  if (trend === 'BULLISH') {
+    drift = volatility * 1.5; // 牛市：明显向上漂移 (+3% per candle)
+  } else if (trend === 'BEARISH') {
+    drift = -volatility * 1.5; // 熊市：明显向下漂移 (-3% per candle)
+  }
+
+  const changePercent = (Math.random() - 0.5) * 2 * volatility + drift;
   const open = lastClose;
   const close = open * (1 + changePercent);
 
@@ -107,9 +126,12 @@ export async function initializeMarketData() {
     // 从稍早的价格开始，模拟趋势
     let lastClose = targetPrice * (0.95 + Math.random() * 0.1); // 95%-105% 的目标价格
 
+    const trend = coinTrends[coin];
+    console.log(`[MarketData] ${coin} 趋势: ${trend}`);
+
     for (let i = minutesInDay; i >= 10; i -= 10) {
       const timestamp = now - i * 60 * 1000;
-      const candle = generateCandle(lastClose);
+      const candle = generateCandle(lastClose, 0.02, trend);
       candle.timestamp = timestamp;
       candles.push(candle);
       lastClose = candle.close;
@@ -227,8 +249,18 @@ export async function updateMarketData() {
       // 使用 CoinGecko 真实价格
       newClose = realPricesCache[coin].price;
     } else {
-      // 生成模拟价格
-      newClose = lastCandle.close * (1 + (Math.random() - 0.5) * 0.04);
+      // 生成有趋势的模拟价格
+      const trend = coinTrends[coin] || 'RANGING';
+      const volatility = 0.02;
+      let drift = 0;
+
+      if (trend === 'BULLISH') {
+        drift = volatility * 1.5; // 牛市：明显向上漂移 (+3% per candle)
+      } else if (trend === 'BEARISH') {
+        drift = -volatility * 1.5; // 熊市：明显向下漂移 (-3% per candle)
+      }
+
+      newClose = lastCandle.close * (1 + (Math.random() - 0.5) * 2 * volatility + drift);
     }
 
     // 生成 K 线

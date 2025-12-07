@@ -25,7 +25,7 @@ import { getRiskManager } from './riskManagement';
 import { getEventBus } from './events/eventBus';
 import { TradingEventType } from './events/types';
 
-const INITIAL_CAPITAL = 1000; // ✅ 修复：匹配测试网实际金额
+const INITIAL_CAPITAL = 1000; // 模拟模式默认初始资金（真实交易模式下会动态获取）
 const MAKER_FEE = -0.0002; // 返佣
 const TAKER_FEE = 0.00055;
 
@@ -85,15 +85,17 @@ export function validateTradingDecision(
     };
   }
 
-  // 验证 3: 2:1 盈亏比检查（nof1.ai 强制规则）
+  // 验证 3: 盈亏比检查（nof1.ai 强制规则）
   const riskDistance = Math.abs(currentPrice - exitPlan.stopLoss);
   const rewardDistance = Math.abs(exitPlan.takeProfit - currentPrice);
   const riskRewardRatio = rewardDistance / riskDistance;
 
-  if (riskRewardRatio < 2.0) {
+  const REQUIRED_RISK_REWARD = 1.5; // 🔧 真实交易：平衡要求 1.5:1 盈亏比（更实用）
+
+  if (riskRewardRatio < REQUIRED_RISK_REWARD) {
     return {
       valid: false,
-      reason: `Risk-reward ratio ${riskRewardRatio.toFixed(2)}:1 < required 2:1 (risk: $${riskDistance.toFixed(2)}, reward: $${rewardDistance.toFixed(2)})`
+      reason: `Risk-reward ratio ${riskRewardRatio.toFixed(2)}:1 < required ${REQUIRED_RISK_REWARD}:1 (risk: $${riskDistance.toFixed(2)}, reward: $${rewardDistance.toFixed(2)})`
     };
   }
 
@@ -208,8 +210,13 @@ export class TradingEngineState {
   private checkTotalLossCircuitBreaker(modelName: string, currentEquity: number): boolean {
     if (this.tradingHalted) return true;
 
-    // ✅ 修复：使用单个模型的初始资金计算
-    const totalLossPercent = ((currentEquity - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100;
+    // ✅ 真实交易模式：使用当日起始余额作为基准
+    // ✅ 模拟模式：使用固定的初始资金
+    const baseCapital = CONFIG.USE_REAL_TRADING
+      ? (this.dailyStartEquity.get(modelName) || currentEquity)
+      : INITIAL_CAPITAL;
+
+    const totalLossPercent = ((currentEquity - baseCapital) / baseCapital) * 100;
 
     if (totalLossPercent <= -CONFIG.SAFETY.MAX_TOTAL_LOSS_PERCENT) {
       this.tradingHalted = true;
@@ -228,9 +235,9 @@ export class TradingEngineState {
       console.error('='.repeat(60));
       console.error(`当前总回报: ${totalLossPercent.toFixed(2)}%`);
       console.error(`熔断阈值: -${CONFIG.SAFETY.MAX_TOTAL_LOSS_PERCENT}%`);
-      console.error(`初始资金: $${INITIAL_CAPITAL.toFixed(2)}`);
+      console.error(`基准资金: $${baseCapital.toFixed(2)} ${CONFIG.USE_REAL_TRADING ? '(今日起始余额)' : '(初始资金)'}`);
       console.error(`当前权益: $${currentEquity.toFixed(2)}`);
-      console.error(`总亏损: $${(currentEquity - INITIAL_CAPITAL).toFixed(2)}`);
+      console.error(`总亏损: $${(currentEquity - baseCapital).toFixed(2)}`);
       console.error('\n⚠️  请检查系统配置和策略，考虑是否需要调整参数。');
       console.error('='.repeat(60) + '\n');
       return true;
@@ -343,26 +350,72 @@ export class TradingEngineState {
     // 更新持仓的当前价格和P&L
     this.updatePositions(account);
 
+    // ✅ 真实交易模式：获取 OKX 现货持仓并添加到账户状态
+    if (CONFIG.USE_REAL_TRADING) {
+      try {
+        const { getOKXClient } = await import('./okxClient');
+        const okxClient = getOKXClient();
+
+        if (okxClient.isAvailable()) {
+          const spotPositions = await okxClient.getSpotPositions();
+
+          // 获取当前价格并更新持仓信息
+          for (const pos of spotPositions) {
+            try {
+              const currentPrice = await okxClient.getMarketPrice(pos.coin as any);
+              pos.currentPrice = currentPrice;
+              pos.notional = pos.size * currentPrice;
+
+              // 如果成本价为0，用当前价格代替
+              if (pos.entryPrice === 0) {
+                pos.entryPrice = currentPrice;
+              }
+
+              // 重新计算未实现盈亏
+              pos.unrealizedPnL = (currentPrice - pos.entryPrice) * pos.size;
+
+              console.log(`[TradingEngine] 💼 现货持仓: ${pos.coin} ${pos.size.toFixed(4)}个 @$${pos.entryPrice.toFixed(2)} → $${currentPrice.toFixed(2)} (PnL: $${pos.unrealizedPnL.toFixed(2)})`);
+            } catch (error) {
+              console.warn(`[TradingEngine] ⚠️ 获取 ${pos.coin} 价格失败:`, error);
+            }
+          }
+
+          // 将现货持仓添加到账户状态（替换模拟持仓）
+          account.positions = spotPositions as any[];
+          console.log(`[TradingEngine] 📊 已加载 ${spotPositions.length} 个现货持仓到 AI 决策上下文`);
+        }
+      } catch (error) {
+        console.error(`[TradingEngine] ❌ 获取现货持仓失败:`, error);
+      }
+    }
+
     // 🛡️ 安全检查：检查总亏损熔断和单日亏损限制
-    // ✅ 修复：在真实交易模式下，使用实际 Hyperliquid 账户权益
+    // ✅ 修复：在真实交易模式下，使用实际交易所账户权益
     let currentEquity: number;
 
     if (CONFIG.USE_REAL_TRADING) {
       try {
-        const { getHyperliquidClient } = await import('./hyperliquidClient');
-        const hlClient = getHyperliquidClient();
+        // 使用 OKX 账户权益（与 RealTradingExecutor 保持一致）
+        const { getOKXClient } = await import('./okxClient');
+        const okxClient = getOKXClient();
 
-        if (hlClient.isAvailable()) {
-          const accountInfo = await hlClient.getAccountInfo();
-          currentEquity = accountInfo.accountValue;
-          console.log(`[Safety] 💰 使用真实 Hyperliquid 账户权益: $${currentEquity.toFixed(2)}`);
+        if (okxClient.isAvailable()) {
+          const accountInfo = await okxClient.getAccountInfo();
+          currentEquity = parseFloat(accountInfo.totalEq || '0');
+          console.log(`[Safety] 💰 使用真实 OKX 账户权益: $${currentEquity.toFixed(2)}`);
+
+          // ✅ 初始化今日起始余额（如果还没设置）
+          if (!this.dailyStartEquity.has(model.name) || this.dailyStartEquity.get(model.name) === INITIAL_CAPITAL) {
+            this.dailyStartEquity.set(model.name, currentEquity);
+            console.log(`[Safety] 📊 设置 ${model.displayName} 今日起始余额: $${currentEquity.toFixed(2)}`);
+          }
         } else {
           // 降级到模拟数据
           currentEquity = this.calculateTotalEquity(account);
-          console.warn(`[Safety] ⚠️ Hyperliquid 不可用，使用模拟账户权益: $${currentEquity.toFixed(2)}`);
+          console.warn(`[Safety] ⚠️ OKX 不可用，使用模拟账户权益: $${currentEquity.toFixed(2)}`);
         }
       } catch (error) {
-        console.error(`[Safety] ❌ 获取 Hyperliquid 账户失败，使用模拟数据:`, error);
+        console.error(`[Safety] ❌ 获取 OKX 账户失败，使用模拟数据:`, error);
         currentEquity = this.calculateTotalEquity(account);
       }
     } else {
@@ -395,7 +448,13 @@ export class TradingEngineState {
     // 🔍 调试：AI 响应长度
     console.log(`[TradingEngine] 🔍 ${model.displayName} 响应长度: ${rawResponse.length} 字符`);
 
+    // 🔍 调试：打印 AI 原始响应（用于诊断）
+    console.log(`[TradingEngine] 📝 AI 原始响应:\n${rawResponse}\n`);
+
     const { chainOfThought, decisions } = parseNOF1Response(rawResponse);
+
+    // 🔍 调试：打印思考过程
+    console.log(`[TradingEngine] 💭 AI 思考过程: ${chainOfThought.substring(0, 500)}...`);
 
     // 🔍 调试：解析结果
     console.log(`[TradingEngine] 🔍 ${model.displayName} 解析结果: ${decisions.length} 个决策`);

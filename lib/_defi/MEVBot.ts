@@ -414,8 +414,8 @@ export class MEVBot extends EventEmitter {
       functionName: 'uniswapV3Swap',
       args: [],
       protocol: 'Uniswap V3',
-      tokenIn: PROTOCOL_ADDRESSES.WETH,
-      tokenOut: '0x...', // 需要从 tx.data 解析
+      tokenIn: PROTOCOL_ADDRESSES.WETH as `0x${string}`,
+      tokenOut: '0x0000000000000000000000000000000000000000' as `0x${string}`, // 需要从 tx.data 解析
       amountIn: new SafePrice(formatEther(tx.value))
     };
   }

@@ -5,8 +5,8 @@ import { Coin } from '@/types/trading';
 
 const BINANCE_API_BASE = 'https://api.binance.com/api/v3';
 
-// 币种映射到Binance交易对
-const COIN_TO_SYMBOL: Record<Coin, string> = {
+// 币种映射到Binance交易对 (部分支持)
+const COIN_TO_SYMBOL: Partial<Record<Coin, string>> = {
   BTC: 'BTCUSDT',
   ETH: 'ETHUSDT',
   SOL: 'SOLUSDT',
@@ -113,7 +113,7 @@ export function createBinanceWebSocket(
   coin: Coin,
   onPrice: (price: number) => void
 ): WebSocket {
-  const symbol = COIN_TO_SYMBOL[coin].toLowerCase();
+  const symbol = (COIN_TO_SYMBOL[coin] || `${coin}USDT`).toLowerCase();
   const ws = new WebSocket(`wss://stream.binance.com:9443/ws/${symbol}@trade`);
 
   ws.onmessage = (event) => {

@@ -48,7 +48,7 @@ export interface CrossExchangeOpportunity {
  * 多交易所连接器
  */
 export class MultiExchangeConnector extends EventEmitter {
-  private exchanges = new Map<string, ccxt.Exchange>();
+  private exchanges = new Map<string, any>(); // NOTE: ccxt.Exchange type not available
   private priceCache = new Map<string, PriceData>();
   private isRunning = false;
   private updateInterval: NodeJS.Timeout | null = null;
@@ -139,7 +139,7 @@ export class MultiExchangeConnector extends EventEmitter {
   /**
    * 测试交易所连接
    */
-  private async testExchangeConnection(exchange: ccxt.Exchange, name: string): Promise<void> {
+  private async testExchangeConnection(exchange: any, name: string): Promise<void> {
     // 测试获取 BTC 价格
     const ticker = await exchange.fetchTicker('BTC/USDT');
     if (!ticker || !ticker.last) {
@@ -208,7 +208,7 @@ export class MultiExchangeConnector extends EventEmitter {
    * 获取单个交易所的价格
    */
   private async fetchExchangePrice(
-    exchange: ccxt.Exchange,
+    exchange: any,
     exchangeName: string,
     coin: SupportedCoin
   ): Promise<void> {

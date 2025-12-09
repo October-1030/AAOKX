@@ -11,9 +11,9 @@ export const CONFIG = {
   // 是否使用真实AI API
   USE_REAL_AI: true, // ✅ 使用真实 DeepSeek API
 
-  // 是否使用真实交易（Hyperliquid）
+  // 是否使用真实交易（OKX）
   // ⚠️ 警告：设置为 true 将执行真实订单！
-  USE_REAL_TRADING: true, // ✅ 启用测试网真实交易
+  USE_REAL_TRADING: true, // ✅ 启用 OKX 真实交易
 
   // 交易周期间隔（毫秒）
   TRADING_INTERVAL_MS: 180000, // 3分钟
@@ -75,15 +75,10 @@ export const CONFIG = {
   },
 
   // AI API配置（需要环境变量）
+  // NOTE: 系统已重构为 DeepSeek 单模型架构，其他模型配置已移除
   AI: {
-    OPENAI: {
-      ENABLED: !!process.env.OPENAI_API_KEY,
-      MODEL: 'gpt-4-turbo-preview',
-    },
-    ANTHROPIC: {
-      ENABLED: !!process.env.ANTHROPIC_API_KEY,
-      MODEL: 'claude-3-5-sonnet-20241022',
-    },
+    // NOTE: OpenAI 配置已移除，原来是多模型对战系统的一部分
+    // NOTE: Anthropic 配置已移除，原来是多模型对战系统的一部分
     DEEPSEEK: {
       ENABLED: !!process.env.DEEPSEEK_API_KEY,
       MODEL: 'deepseek-chat',
@@ -99,7 +94,7 @@ export function getConfigSummary(): string {
 Alpha Arena Configuration:
 - Market Data: ${CONFIG.USE_REAL_MARKET_DATA ? '🌐 Real (CoinGecko)' : '🎲 Simulated'}
 - AI Models: ${CONFIG.USE_REAL_AI ? '🤖 Real (DeepSeek)' : '🎭 Simulated'}
-- Trading Mode: ${CONFIG.USE_REAL_TRADING ? '⚠️ LIVE TRADING (Hyperliquid)' : '🧪 Simulated (Safe)'}
+- Trading Mode: ${CONFIG.USE_REAL_TRADING ? '⚠️ LIVE TRADING (OKX)' : '🧪 Simulated (Safe)'}
 - Trading Interval: ${CONFIG.TRADING_INTERVAL_MS / 1000}s
 - Data Refresh: ${CONFIG.MARKET_DATA_REFRESH_MS / 1000}s
   `.trim();
@@ -111,9 +106,10 @@ Alpha Arena Configuration:
 export function validateConfig(): { valid: boolean; errors: string[] } {
   const errors: string[] = [];
 
+  // NOTE: 系统已重构为 DeepSeek 单模型，只检查 DeepSeek API Key
   if (CONFIG.USE_REAL_AI) {
-    if (!CONFIG.AI.OPENAI.ENABLED && !CONFIG.AI.ANTHROPIC.ENABLED && !CONFIG.AI.DEEPSEEK.ENABLED) {
-      errors.push('USE_REAL_AI is enabled but no AI API keys are configured');
+    if (!CONFIG.AI.DEEPSEEK.ENABLED) {
+      errors.push('USE_REAL_AI is enabled but DEEPSEEK_API_KEY is not configured');
     }
   }
 

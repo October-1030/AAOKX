@@ -23,5 +23,5 @@
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "lib/defi", "lib/_defi", "lib/enhanced", "lib/mev", "lib/_enhanced", "lib/_mev", "lib/ml", "lib/advanced", "lib/strategies", "test-*.ts", "*_TEST.ts", "ULTIMATE_*.ts", "close-all-positions.ts", "force-close-eth.ts"]
 }

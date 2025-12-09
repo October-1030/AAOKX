@@ -21,7 +21,7 @@ const OKX_CONFIG: OKXConfig = {
 };
 
 // 币种到OKX交易对的映射
-const COIN_TO_OKX_SYMBOL: Record<Coin, string> = {
+const COIN_TO_OKX_SYMBOL: Partial<Record<Coin, string>> = {
   // 主流币种
   BTC: 'BTC-USDT-SWAP',
   ETH: 'ETH-USDT-SWAP', 
@@ -343,7 +343,7 @@ export class OKXClient {
    */
   async getMarketPrice(coin: Coin): Promise<number> {
     const prices = await this.getAllMarketPrices();
-    return prices[coin] || 0;
+    return prices?.[coin] || 0;
   }
 
   /**

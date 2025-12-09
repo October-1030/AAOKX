@@ -15,7 +15,7 @@ const HYPERLIQUID_CONFIG = {
 };
 
 // 币种映射到 Hyperliquid 的永续合约交易对
-const COIN_TO_SYMBOL: Record<Coin, string> = {
+const COIN_TO_SYMBOL: Partial<Record<Coin, string>> = {
   // 主流币种 (原有6个)
   BTC: 'BTC-PERP',
   ETH: 'ETH-PERP',
@@ -253,8 +253,8 @@ export class HyperliquidClient {
       const mainCoins = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
       
       for (const coin of mainCoins) {
-        const symbol = COIN_TO_SYMBOL[coin as Coin];
-        const rawPrice = allMids[symbol];
+        const symbol = COIN_TO_SYMBOL[coin as Coin] || `${coin}-PERP`;
+        const rawPrice = allMids[symbol as string];
         const price = parseFloat(rawPrice || '0');
         prices[coin] = price;
 
@@ -266,7 +266,7 @@ export class HyperliquidClient {
     } catch (error) {
       console.error('[Hyperliquid] ❌ 获取市场价格失败:', error);
       console.warn('[Hyperliquid] ⚠️ API临时不可用，将降级到备用价格源');
-      return null; // 返回null让系统降级到CoinGecko
+      return {} as Record<Coin, number>; // 返回空对象让系统降级到CoinGecko
     }
   }
 

@@ -1,3 +1,15 @@
+/**
+ * NOTE: 此组件已废弃
+ *
+ * 系统已重构为 DeepSeek 单模型架构，不再需要多模型排行榜。
+ * 原来的多模型对战逻辑（Claude/GPT-5/Gemini/Qwen/Grok）已移除。
+ *
+ * 保留此文件是为了代码兼容性，但不会在前端显示。
+ * 如果需要查看 DeepSeek 的表现，请使用主页的决策日志和权益曲线。
+ *
+ * @deprecated 系统改为 DeepSeek 单模型，此排行榜组件不再使用
+ */
+
 'use client';
 
 import { ModelPerformance } from '@/types/trading';

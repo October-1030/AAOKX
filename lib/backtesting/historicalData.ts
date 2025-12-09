@@ -23,8 +23,8 @@ export interface HistoricalDataSet {
 // Binance API 配置
 const BINANCE_API_BASE = 'https://api.binance.com/api/v3';
 
-// 币种映射到 Binance 交易对
-const COIN_TO_SYMBOL: Record<Coin, string> = {
+// 币种映射到 Binance 交易对 (部分支持)
+const COIN_TO_SYMBOL: Partial<Record<Coin, string>> = {
   BTC: 'BTCUSDT',
   ETH: 'ETHUSDT',
   SOL: 'SOLUSDT',

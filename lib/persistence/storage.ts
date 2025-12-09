@@ -4,7 +4,8 @@
  * TODO: 配置 @prisma/adapter-libsql 以支持 Next.js
  */
 
-import { PrismaClient } from '@prisma/client';
+// NOTE: PrismaClient 导入已移除，因为数据库功能暂时禁用
+// import { PrismaClient } from '@prisma/client';
 import {
   CompletedTrade,
   Position,

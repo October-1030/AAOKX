@@ -85,17 +85,25 @@ export function validateTradingDecision(
     };
   }
 
-  // 验证 3: 盈亏比检查（nof1.ai 强制规则）
+  // 验证 3: 盈亏比检查（HARD RULE: 最小 2:1）
   const riskDistance = Math.abs(currentPrice - exitPlan.stopLoss);
   const rewardDistance = Math.abs(exitPlan.takeProfit - currentPrice);
-  const riskRewardRatio = rewardDistance / riskDistance;
 
-  const REQUIRED_RISK_REWARD = 1.5; // 🔧 真实交易：平衡要求 1.5:1 盈亏比（更实用）
+  // 防止除零错误
+  if (riskDistance <= 0) {
+    return {
+      valid: false,
+      reason: `Invalid risk distance: stop-loss too close to entry price`
+    };
+  }
+
+  const riskRewardRatio = rewardDistance / riskDistance;
+  const REQUIRED_RISK_REWARD = 2.0; // HARD RULE: 最小 2:1 盈亏比
 
   if (riskRewardRatio < REQUIRED_RISK_REWARD) {
     return {
       valid: false,
-      reason: `Risk-reward ratio ${riskRewardRatio.toFixed(2)}:1 < required ${REQUIRED_RISK_REWARD}:1 (risk: $${riskDistance.toFixed(2)}, reward: $${rewardDistance.toFixed(2)})`
+      reason: `Risk-reward ratio below 2:1 (got ${riskRewardRatio.toFixed(1)}:1, need >= 2.0:1)`
     };
   }
 
@@ -122,8 +130,13 @@ export function validateTradingDecision(
 
 /**
  * 交易引擎状态
+ *
+ * NOTE: 系统已重构为 DeepSeek 单模型架构
+ * modelStates Map 保留是为了代码兼容性，但实际只包含一个模型（DeepSeek）
+ * 唯一决策链：行情 → 指标 → DeepSeek → 风控 → RealTradingExecutor
  */
 export class TradingEngineState {
+  // NOTE: 虽然使用 Map 结构，但系统现在只有一个模型（DeepSeek）
   private modelStates: Map<string, ModelState> = new Map();
   private storage = getTradingStorage(); // 💾 持久化存储
   private riskManager = getRiskManager(); // 🛡️ 风险管理器

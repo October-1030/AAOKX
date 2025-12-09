@@ -25,7 +25,7 @@ export interface FuturesData {
 /**
  * 币种符号映射（Binance 格式）
  */
-const SYMBOL_MAP: Record<Coin, string> = {
+const SYMBOL_MAP: Partial<Record<Coin, string>> = {
   BTC: 'BTCUSDT',
   ETH: 'ETHUSDT',
   SOL: 'SOLUSDT',

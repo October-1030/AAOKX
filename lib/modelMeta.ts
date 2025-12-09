@@ -14,8 +14,12 @@ export interface ModelMetadata {
 }
 
 /**
- * 所有AI模型的统一元数据配置
- * 在此统一管理品牌色、Logo、描述等信息
+ * AI模型元数据配置
+ *
+ * NOTE: 系统已重构为 DeepSeek 单模型架构
+ * 原来的多模型对战逻辑（Claude/GPT-5/Gemini/Qwen/Grok）已移除
+ *
+ * 唯一有效模型：DeepSeek V3.1
  */
 export const MODEL_METADATA: Record<string, ModelMetadata> = {
   'deepseek-v3': {
@@ -30,65 +34,8 @@ export const MODEL_METADATA: Record<string, ModelMetadata> = {
     apiDocs: 'https://platform.deepseek.com/api-docs',
   },
 
-  'claude-4.5': {
-    id: 'claude-4.5',
-    name: 'claude-4.5',
-    displayName: 'Claude 4.5 Sonnet',
-    provider: 'Anthropic',
-    strategy: 'Conservative value investing approach',
-    color: '#8b5cf6', // 紫色
-    description: 'Anthropic\'s flagship model with careful, methodical trading',
-    website: 'https://www.anthropic.com',
-    apiDocs: 'https://docs.anthropic.com',
-  },
-
-  'gpt-5': {
-    id: 'gpt-5',
-    name: 'gpt-5',
-    displayName: 'GPT-5',
-    provider: 'OpenAI',
-    strategy: 'Balanced multi-asset strategy',
-    color: '#10b981', // 绿色
-    description: 'OpenAI\'s latest model with balanced risk-reward approach',
-    website: 'https://openai.com',
-    apiDocs: 'https://platform.openai.com/docs',
-  },
-
-  'gemini-2.5': {
-    id: 'gemini-2.5',
-    name: 'gemini-2.5',
-    displayName: 'Gemini 2.5 Pro',
-    provider: 'Google DeepMind',
-    strategy: 'Reactive trading with variable positions',
-    color: '#ef4444', // 红色
-    description: 'Google\'s experimental high-frequency trading approach',
-    website: 'https://deepmind.google',
-    apiDocs: 'https://ai.google.dev/docs',
-  },
-
-  'qwen-3': {
-    id: 'qwen-3',
-    name: 'qwen-3',
-    displayName: 'Qwen 3 Max',
-    provider: 'Alibaba Cloud',
-    strategy: 'Medium-amplitude swing trading method',
-    color: '#f59e0b', // 橙色
-    description: 'Alibaba\'s model optimized for Asian trading hours',
-    website: 'https://www.alibabacloud.com',
-    apiDocs: 'https://help.aliyun.com/zh/dashscope',
-  },
-
-  'grok-4': {
-    id: 'grok-4',
-    name: 'grok-4',
-    displayName: 'Grok 4',
-    provider: 'xAI',
-    strategy: 'High-frequency scalping attempts',
-    color: '#ec4899', // 粉色
-    description: 'Elon Musk\'s xAI with aggressive scalping strategy',
-    website: 'https://x.ai',
-    apiDocs: 'https://docs.x.ai',
-  },
+  // NOTE: 以下模型配置已移除，系统现在只使用 DeepSeek 单模型
+  // 原多模型对战包括：Claude 4.5, GPT-5, Gemini 2.5, Qwen 3, Grok 4
 };
 
 /**

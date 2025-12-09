@@ -221,7 +221,7 @@ export class BacktestEngine {
       const side = action === 'buy_to_enter' ? 'LONG' : 'SHORT';
       const adjustedSize = Math.min(notional, limits.maxPositionSize);
 
-      if (adjustedSize < limits.minOrderSize[coin]) {
+      if (adjustedSize < (limits.minOrderSize as any)[coin]) {
         return; // 订单太小，跳过
       }
 

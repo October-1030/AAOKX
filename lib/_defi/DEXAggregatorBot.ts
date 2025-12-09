@@ -17,7 +17,8 @@ import {
 import { mainnet, arbitrum, polygon } from 'viem/chains';
 import { SafePrice, TradingMath } from '../advanced/precisionMath';
 import { logger } from '../advanced/logger';
-import fetch from 'node-fetch';
+// NOTE: Using global fetch in Next.js environment
+// import fetch from 'node-fetch';
 
 // DEX 协议接口
 export interface DEXProtocol {

@@ -8,7 +8,7 @@ import { Coin } from '@/types/trading';
 const COINGLASS_API_BASE = 'https://open-api.coinglass.com/public/v2';
 
 // 币种映射到 CoinGlass 的符号
-const COIN_TO_COINGLASS: Record<Coin, string> = {
+const COIN_TO_COINGLASS: Partial<Record<Coin, string>> = {
   BTC: 'BTC',
   ETH: 'ETH',
   SOL: 'SOL',

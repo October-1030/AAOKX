@@ -313,7 +313,7 @@ export class CEXArbitrageEngine extends EventEmitter {
       
     } catch (error) {
       logger.error('获取 Hyperliquid 价格失败', error);
-      return {};
+      return {} as Record<SupportedCoin, USD>;
     }
   }
 

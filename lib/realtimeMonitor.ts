@@ -1,17 +1,23 @@
 /**
- * 实时监控系统
+ * 实时监控系统（OKX-only 架构）
  * 独立于交易周期，持续监控仓位风险
+ * NOTE: 系统已重构为 OKX 单交易所架构，Hyperliquid 支持已移除
  */
 
 import { getRealTradingExecutor } from './realTradingExecutor';
-import { getHyperliquidClient } from './hyperliquidClient';
+// NOTE: Hyperliquid 客户端导入已移除，系统现在只使用 OKX
+// import { getHyperliquidClient } from './hyperliquidClient';
+import { getOKXClient } from './okxClient';
 import { getCurrentPrice } from './marketData';
 import { tradingLogger } from './logger';
+import { getTradeLog, TradeStatus } from './tradeLog';
+import { Coin } from '@/types/trading';
 
 export class RealtimeMonitor {
   private monitorInterval: NodeJS.Timeout | null = null;
   private executor = getRealTradingExecutor();
-  private hyperliquid = getHyperliquidClient();
+  // NOTE: 系统已重构为 OKX-only 架构
+  private okx = getOKXClient();
   
   /**
    * 启动实时监控
@@ -65,16 +71,57 @@ export class RealtimeMonitor {
   private async checkSinglePosition(position: any) {
     const currentPrice = getCurrentPrice(position.coin);
     const entryPrice = position.entryPrice;
-    
+    const coin = position.coin as Coin;
+
     // 计算盈亏
     const priceChangePercent = ((currentPrice - entryPrice) / entryPrice) * 100;
-    const pnlPercent = position.side === 'LONG' 
-      ? priceChangePercent 
+    const pnlPercent = position.side === 'LONG'
+      ? priceChangePercent
       : -priceChangePercent;
-    
-    // 动态止损规则
+
+    // 📊 优先检查 TradeLog 中的止损止盈价格
+    const tradeLog = getTradeLog();
+    const openTrade = tradeLog.getOpenTradeBySymbol(coin);
+
+    if (openTrade) {
+      // 检查 TradeLog 中设置的止损价格
+      if (openTrade.stopLoss && openTrade.stopLoss > 0) {
+        const hitStopLoss = position.side === 'LONG'
+          ? currentPrice <= openTrade.stopLoss
+          : currentPrice >= openTrade.stopLoss;
+
+        if (hitStopLoss) {
+          console.log(`[Monitor] 🚨 ${coin} 触发 TradeLog 止损！`);
+          console.log(`   入场价: $${entryPrice.toFixed(2)}`);
+          console.log(`   止损价: $${openTrade.stopLoss.toFixed(2)}`);
+          console.log(`   当前价: $${currentPrice.toFixed(2)}`);
+
+          await this.executeEmergencyClose(position, 'TradeLog Stop Loss', 'stopped');
+          return; // 已处理，不再继续检查
+        }
+      }
+
+      // 检查 TradeLog 中设置的止盈价格
+      if (openTrade.takeProfit && openTrade.takeProfit > 0) {
+        const hitTakeProfit = position.side === 'LONG'
+          ? currentPrice >= openTrade.takeProfit
+          : currentPrice <= openTrade.takeProfit;
+
+        if (hitTakeProfit) {
+          console.log(`[Monitor] 🎯 ${coin} 触发 TradeLog 止盈！`);
+          console.log(`   入场价: $${entryPrice.toFixed(2)}`);
+          console.log(`   止盈价: $${openTrade.takeProfit.toFixed(2)}`);
+          console.log(`   当前价: $${currentPrice.toFixed(2)}`);
+
+          await this.executeEmergencyClose(position, 'TradeLog Take Profit', 'tp_hit');
+          return; // 已处理，不再继续检查
+        }
+      }
+    }
+
+    // 动态止损规则（备用规则，如果 TradeLog 没有设置价格）
     const stopLossRules = this.getStopLossRules(pnlPercent, position);
-    
+
     // 检查是否需要止损
     if (this.shouldStopLoss(pnlPercent, stopLossRules)) {
       console.log(`[Monitor] 🚨 ${position.coin} 触发止损条件！`);
@@ -82,18 +129,18 @@ export class RealtimeMonitor {
       console.log(`   当前价: $${currentPrice.toFixed(2)}`);
       console.log(`   盈亏: ${pnlPercent.toFixed(2)}%`);
       console.log(`   触发规则: ${stopLossRules.triggeredRule}`);
-      
+
       // 执行平仓
-      await this.executeEmergencyClose(position, stopLossRules.triggeredRule);
+      await this.executeEmergencyClose(position, stopLossRules.triggeredRule, 'stopped');
     }
-    
+
     // 检查是否需要止盈
     if (this.shouldTakeProfit(pnlPercent, position)) {
       console.log(`[Monitor] 🎯 ${position.coin} 触发止盈条件！`);
       console.log(`   盈利: +${pnlPercent.toFixed(2)}%`);
-      
+
       // 执行平仓
-      await this.executeEmergencyClose(position, 'Take Profit');
+      await this.executeEmergencyClose(position, 'Take Profit', 'tp_hit');
     }
   }
   
@@ -173,27 +220,46 @@ export class RealtimeMonitor {
   /**
    * 执行紧急平仓
    */
-  private async executeEmergencyClose(position: any, reason: string) {
+  private async executeEmergencyClose(position: any, reason: string, status: TradeStatus = 'closed') {
     try {
-      console.log(`[Monitor] 🔴 执行紧急平仓: ${position.coin}`);
-      
+      const coin = position.coin as Coin;
+      const exitPrice = getCurrentPrice(coin);
+
+      console.log(`[Monitor] 🔴 执行紧急平仓: ${coin}`);
+
       // 记录日志
       tradingLogger.log('TRADE', `紧急平仓: ${reason}`, {
-        coin: position.coin,
+        coin,
         entryPrice: position.entryPrice,
-        currentPrice: getCurrentPrice(position.coin),
+        currentPrice: exitPrice,
         pnl: position.unrealizedPnL,
-        reason
+        reason,
+        status
       });
-      
-      // 执行平仓
-      const result = await this.hyperliquid.closePosition(position.coin);
-      
-      console.log(`[Monitor] ✅ ${position.coin} 平仓成功`);
-      
+
+      // 执行平仓（OKX-only）
+      const result = await this.okx.closePosition(coin);
+
+      console.log(`[Monitor] ✅ ${coin} 平仓成功`);
+
+      // 📊 更新 TradeLog
+      const tradeLog = getTradeLog();
+      tradeLog.closeTradeBySymbol(coin, exitPrice, status, reason);
+
+      // 更新净值
+      try {
+        const accountInfo = await this.okx.getAccountInfo();
+        const equity = parseFloat(accountInfo.totalEq || '0');
+        if (equity > 0) {
+          tradeLog.updateEquity(equity);
+        }
+      } catch (e) {
+        console.warn('[Monitor] 无法更新净值:', e);
+      }
+
       // 发送通知（如果需要）
       this.sendAlert(position, reason);
-      
+
       return result;
     } catch (error) {
       console.error(`[Monitor] ❌ 紧急平仓失败:`, error);

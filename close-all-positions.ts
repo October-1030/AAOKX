@@ -79,7 +79,7 @@ async function closeAllPositions() {
 
     if (finalPositions.length > 0) {
       console.warn('⚠️ 警告: 仍有持仓未平仓！');
-      finalPositions.forEach(pos => {
+      finalPositions.forEach((pos: any) => {
         console.log(`   - ${pos.coin}: ${pos.side} ${Math.abs(pos.size)}`);
       });
     } else {

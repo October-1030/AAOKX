@@ -1,9 +1,15 @@
 /**
- * 真实交易执行器
- * 支持 Hyperliquid 和 OKX 交易所
+ * 真实交易执行器（OKX-only 架构）
+ * NOTE: 系统已重构为 OKX 单交易所架构，Hyperliquid 支持已移除
+ *
+ * 功能：
+ * - 执行 AI 决策（开仓/平仓）
+ * - 整合 TradeLog 记录交易和盈亏
+ * - 自动止损/止盈管理
  */
 
-import { getHyperliquidClient } from './hyperliquidClient';
+// NOTE: Hyperliquid 客户端导入已移除，系统现在只使用 OKX
+// import { getHyperliquidClient } from './hyperliquidClient';
 import { getOKXClient } from './okxClient';
 import { getCoinGlassClient } from './coinglassClient';
 import {
@@ -13,8 +19,10 @@ import {
   getRiskWarnings,
 } from './tradingConfig';
 import { Coin, Position, TradingDecision } from '@/types/trading';
+import { getTradeLog, TradeStatus } from './tradeLog';
 
-export type Exchange = 'hyperliquid' | 'okx';
+// NOTE: 系统已重构为 OKX-only 架构，Hyperliquid 选项已移除
+export type Exchange = 'okx';
 
 export interface RealTradingExecutorConfig {
   dryRun: boolean; // 模拟模式（不执行真实订单）
@@ -24,7 +32,8 @@ export interface RealTradingExecutorConfig {
 }
 
 export class RealTradingExecutor {
-  private hyperliquid = getHyperliquidClient();
+  // NOTE: Hyperliquid 客户端已移除，系统现在只使用 OKX
+  // private hyperliquid = getHyperliquidClient();
   private okx = getOKXClient();
   private coinglass = getCoinGlassClient();
   private config: RealTradingExecutorConfig;
@@ -61,31 +70,20 @@ export class RealTradingExecutor {
   }
 
   /**
-   * 获取账户信息和交易限制
+   * 获取账户信息和交易限制（OKX-only）
+   * NOTE: 系统已重构为 OKX 单交易所架构
    */
   async getAccountLimits() {
     try {
-      let balance: number;
-
-      if (this.config.exchange === 'okx') {
-        if (!this.okx.isAvailable()) {
-          console.warn('[RealTrading] ⚠️ OKX 未配置，使用默认限制');
-          return calculateTradingLimits(1000); // 默认 $1,000
-        }
-
-        const accountInfo = await this.okx.getAccountInfo();
-        balance = parseFloat(accountInfo.totalEq || '0');
-      } else {
-        if (!this.hyperliquid.isAvailable()) {
-          console.warn('[RealTrading] ⚠️ Hyperliquid 未配置，使用默认限制');
-          return calculateTradingLimits(10000); // 默认 $10,000
-        }
-
-        const accountInfo = await this.hyperliquid.getAccountInfo();
-        balance = accountInfo.accountValue;
+      if (!this.okx.isAvailable()) {
+        console.warn('[RealTrading] ⚠️ OKX 未配置，使用默认限制');
+        return calculateTradingLimits(1000); // 默认 $1,000
       }
 
-      console.log(`[RealTrading] 💰 ${this.config.exchange.toUpperCase()} 账户余额: $${balance.toFixed(2)}`);
+      const accountInfo = await this.okx.getAccountInfo();
+      const balance = parseFloat(accountInfo.totalEq || '0');
+
+      console.log(`[RealTrading] 💰 OKX 账户余额: $${balance.toFixed(2)}`);
 
       const limits = calculateTradingLimits(balance);
       const warnings = getRiskWarnings(limits);
@@ -95,7 +93,7 @@ export class RealTradingExecutor {
       return limits;
     } catch (error) {
       console.error('[RealTrading] ❌ 获取账户限制失败:', error);
-      return calculateTradingLimits(this.config.exchange === 'okx' ? 1000 : 10000); // 降级到默认值
+      return calculateTradingLimits(1000); // 降级到默认值
     }
   }
 
@@ -157,7 +155,8 @@ export class RealTradingExecutor {
           return await this.executeOpenPosition(decision, limits, 'SHORT');
 
         case 'close':
-          return await this.executeClosePosition(decision, currentPositions);
+          // AI 决策的平仓默认为 'closed'，除非调用方另有指定
+          return await this.executeClosePosition(decision, currentPositions, 'closed');
 
         default:
           console.log(`[RealTrading] ⚠️ 未知动作: ${decision.action}`);
@@ -173,6 +172,10 @@ export class RealTradingExecutor {
   }
 
   /**
+   * @deprecated 自动平仓逻辑已迁移到 RealtimeMonitor
+   * NOTE: 此方法保留作为最后防线，但主动监控价格并决定是否平仓的职责
+   * 已经统一到 lib/realtimeMonitor.ts。RealTradingExecutor 现在只负责执行平仓指令。
+   *
    * 🔥 智能风险管理系统（Perfect Trading Strategy + Trailing Stop）
    * 使用先进的风险管理策略，根据最高盈利点动态调整止损
    * 对于没有 exitPlan 的旧仓位，使用紧急止损保护
@@ -200,10 +203,10 @@ export class RealTradingExecutor {
         : ((position.entryPrice - currentPrice) / position.entryPrice) * 100;
       
       // 获取最高盈利（如果没有记录，使用当前盈利）
-      const maxProfit = Math.max(currentProfit, position.maxProfit || currentProfit);
-      
+      const maxProfit = Math.max(currentProfit, position.maxUnrealizedPnLPercent || currentProfit);
+
       // 持仓时间（小时）
-      const holdingHours = (Date.now() - (position.entryTime || Date.now())) / (1000 * 60 * 60);
+      const holdingHours = (Date.now() - (position.openedAt || Date.now())) / (1000 * 60 * 60);
       
       // 使用Perfect Trading Strategy获取退出决策
       const strategyDecision = perfectStrategy.getOptimalExitStrategy({
@@ -215,7 +218,7 @@ export class RealTradingExecutor {
         currentProfit,
         maxProfit,
         holdingHours,
-        positionSize: position.size || 100, // 默认仓位大小
+        positionSize: position.notional || 100, // 默认仓位大小（名义价值）
         adx: 25, // 默认ADX值
         volatility: 0.03, // 默认波动率
         trend: currentProfit > 0 ? 'UP' : 'DOWN'
@@ -230,6 +233,8 @@ export class RealTradingExecutor {
         console.log(`   持仓时间: ${holdingHours.toFixed(1)}小时`);
         console.log(`   止损价: $${strategyDecision.stopLoss.toFixed(2)}`);
 
+        // 显式传入 closeStatus，根据盈亏判断是止损还是止盈
+        const perfectCloseStatus: TradeStatus = currentProfit < 0 ? 'stopped' : 'tp_hit';
         const closeResult = await this.executeClosePosition({
           action: 'close',
           coin: position.coin,
@@ -239,7 +244,7 @@ export class RealTradingExecutor {
             stopLoss: currentPrice,
             takeProfit: currentPrice,
           },
-        }, positions);
+        }, positions, perfectCloseStatus, strategyDecision.reason);
 
         if (closeResult.success) {
           closedCount++;
@@ -274,7 +279,7 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          }, positions);
+          }, positions, 'stopped', `Emergency Stop Loss (${currentProfit.toFixed(2)}%)`);
 
           if (closeResult.success) {
             closedCount++;
@@ -299,7 +304,7 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          }, positions);
+          }, positions, 'stopped', `Emergency Stop Loss SHORT (${currentProfit.toFixed(2)}%)`);
 
           if (closeResult.success) {
             closedCount++;
@@ -327,7 +332,7 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          }, positions);
+          }, positions, 'tp_hit', `Emergency Take Profit (+${currentProfit.toFixed(2)}%)`);
 
           if (closeResult.success) {
             closedCount++;
@@ -352,7 +357,7 @@ export class RealTradingExecutor {
               stopLoss: currentPrice,
               takeProfit: currentPrice,
             },
-          }, positions);
+          }, positions, 'tp_hit', `Emergency Take Profit SHORT (+${Math.abs(currentProfit).toFixed(2)}%)`);
 
           if (closeResult.success) {
             closedCount++;
@@ -382,7 +387,7 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        }, positions);
+        }, positions, 'stopped', `Stop Loss triggered at $${stopLoss.toFixed(2)}`);
 
         if (closeResult.success) {
           closedCount++;
@@ -404,7 +409,7 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        }, positions);
+        }, positions, 'tp_hit', `Take Profit triggered at $${takeProfit.toFixed(2)}`);
 
         if (closeResult.success) {
           closedCount++;
@@ -426,7 +431,7 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        }, positions);
+        }, positions, 'stopped', `Stop Loss SHORT triggered at $${stopLoss.toFixed(2)}`);
 
         if (closeResult.success) {
           closedCount++;
@@ -448,7 +453,7 @@ export class RealTradingExecutor {
           coin: position.coin,
           confidence: 1.0,
           exitPlan: position.exitPlan,
-        }, positions);
+        }, positions, 'tp_hit', `Take Profit SHORT triggered at $${takeProfit.toFixed(2)}`);
 
         if (closeResult.success) {
           closedCount++;
@@ -525,9 +530,10 @@ export class RealTradingExecutor {
       };
     }
 
-    // 真实交易
+    // 真实交易（OKX-only）
     try {
-      const client = this.config.exchange === 'okx' ? this.okx : this.hyperliquid;
+      // NOTE: 系统已重构为 OKX-only 架构，直接使用 OKX 客户端
+      const client = this.okx;
 
       // 先设置杠杆
       await client.setLeverage(coin, leverage);
@@ -551,6 +557,28 @@ export class RealTradingExecutor {
         });
       }
 
+      // 📊 记录到 TradeLog
+      const tradeLog = getTradeLog();
+      const { getCurrentPrice } = await import('./marketData');
+      const entryPrice = getCurrentPrice(coin);
+
+      tradeLog.addOpenTrade({
+        symbol: coin,
+        side: side === 'LONG' ? 'long' : 'short',
+        notional: adjustedSizeInUsd,
+        leverage,
+        entryPrice,
+        stopLoss: decision.exitPlan?.stopLoss,
+        takeProfit: decision.exitPlan?.takeProfit,
+        openedAt: Date.now(),
+        // AI 解释字段
+        aiReason: decision.aiReason || decision.justification,
+        marketContext: decision.marketContext,
+        riskNote: decision.riskNote,
+        modelName: 'deepseek-v3',
+        confidence: decision.confidence,
+      });
+
       console.log('[RealTrading] ✅ 订单已提交:', order);
       return {
         success: true,
@@ -567,8 +595,17 @@ export class RealTradingExecutor {
 
   /**
    * 平仓（支持现货和期货）
+   * @param decision 交易决策
+   * @param currentPositions 当前持仓列表
+   * @param closeStatus 平仓状态（由调用方显式传入，不再通过文本猜测）
+   * @param closeReason 平仓原因（可选）
    */
-  private async executeClosePosition(decision: TradingDecision, currentPositions?: Position[]) {
+  private async executeClosePosition(
+    decision: TradingDecision,
+    currentPositions?: Position[],
+    closeStatus: TradeStatus = 'closed',
+    closeReason?: string
+  ) {
     const { coin } = decision;
 
     if (!coin) {
@@ -579,10 +616,15 @@ export class RealTradingExecutor {
     const position = currentPositions?.find(p => p.coin === coin);
     const isSpot = position && (position as any).isSpot === true;
 
-    console.log(`[RealTrading] 🔄 平仓: ${coin} (${isSpot ? '现货' : '期货'})`);
+    // 使用传入的 closeReason，或从 decision 中获取
+    const finalReason = closeReason || decision.aiReason || decision.justification || '';
+
+    console.log(`[RealTrading] 🔄 平仓: ${coin} (${isSpot ? '现货' : '期货'}) [${closeStatus}]`);
 
     if (isSpot && position) {
-      console.log(`[RealTrading] 💼 现货卖出: ${position.size.toFixed(4)} ${coin} @ 市价`);
+      // 从名义价值计算实际数量
+      const spotSize = position.notional / position.currentPrice;
+      console.log(`[RealTrading] 💼 现货卖出: ${spotSize.toFixed(4)} ${coin} @ 市价`);
     }
 
     // 模拟模式
@@ -591,25 +633,22 @@ export class RealTradingExecutor {
       this.dailyTradeCount++;
       return {
         success: true,
-        message: `[DRY RUN] Close ${coin} (${isSpot ? 'SPOT' : 'FUTURES'})`,
+        message: `[DRY RUN] Close ${coin} (${isSpot ? 'SPOT' : 'FUTURES'}) [${closeStatus}]`,
       };
     }
 
-    // 真实交易
+    // 真实交易（OKX-only）
     try {
-      const client = this.config.exchange === 'okx' ? this.okx : this.hyperliquid;
-
+      // NOTE: 系统已重构为 OKX-only 架构，直接使用 OKX 客户端
       let result;
       if (isSpot && position) {
         // ✅ 现货平仓：使用市价卖单
-        if (this.config.exchange === 'okx') {
-          result = await this.okx.closeSpotPosition(coin, position.size);
-        } else {
-          throw new Error('Hyperliquid 不支持现货交易');
-        }
+        // 从名义价值计算实际数量
+        const spotSize = position.notional / position.currentPrice;
+        result = await this.okx.closeSpotPosition(coin, spotSize);
       } else {
         // ✅ 期货平仓：使用合约平仓API
-        result = await client.closePosition(coin);
+        result = await this.okx.closePosition(coin);
       }
 
       this.dailyTradeCount++;
@@ -620,10 +659,29 @@ export class RealTradingExecutor {
         console.log(`[RealTrading] 🗑️ 删除 ${coin} exitPlan`);
       }
 
-      console.log(`[RealTrading] ✅ 平仓成功 (${isSpot ? '现货卖出' : '期货平仓'})`);
+      // 📊 更新 TradeLog - 关闭交易记录
+      // closeStatus 直接使用参数传入的值，不再通过文本匹配猜测
+      const tradeLog = getTradeLog();
+      const { getCurrentPrice } = await import('./marketData');
+      const exitPrice = getCurrentPrice(coin);
+
+      tradeLog.closeTradeBySymbol(coin, exitPrice, closeStatus, finalReason);
+
+      // 更新净值（从 OKX 获取最新账户余额）
+      try {
+        const accountInfo = await this.okx.getAccountInfo();
+        const equity = parseFloat(accountInfo.totalEq || '0');
+        if (equity > 0) {
+          tradeLog.updateEquity(equity);
+        }
+      } catch (e) {
+        console.warn('[RealTrading] 无法更新净值:', e);
+      }
+
+      console.log(`[RealTrading] ✅ 平仓成功 (${isSpot ? '现货卖出' : '期货平仓'}) [${closeStatus}]`);
       return {
         success: true,
-        message: `Closed ${coin} (${isSpot ? 'SPOT' : 'FUTURES'})`,
+        message: `Closed ${coin} (${isSpot ? 'SPOT' : 'FUTURES'}) [${closeStatus}]`,
       };
     } catch (error) {
       console.error('[RealTrading] ❌ 平仓失败:', error);
@@ -644,19 +702,18 @@ export class RealTradingExecutor {
   }
 
   /**
-   * 获取当前持仓
+   * 获取当前持仓（OKX-only）
+   * NOTE: 系统已重构为 OKX 单交易所架构
    */
   async getCurrentPositions(): Promise<Position[]> {
-    const isAvailable = this.config.exchange === 'okx' ? this.okx.isAvailable() : this.hyperliquid.isAvailable();
-
-    if (this.config.dryRun || !isAvailable) {
-      console.log(`[RealTrading] 📊 模拟模式/${this.config.exchange.toUpperCase()}未配置 - 返回空持仓`);
+    if (this.config.dryRun || !this.okx.isAvailable()) {
+      console.log(`[RealTrading] 📊 模拟模式/OKX未配置 - 返回空持仓`);
       return [];
     }
 
     try {
-      const client = this.config.exchange === 'okx' ? this.okx : this.hyperliquid;
-      const positions = await client.getPositions();
+      // NOTE: 系统已重构为 OKX-only 架构，直接使用 OKX 客户端
+      const positions = await this.okx.getPositions();
       const { getCurrentPrice } = await import('./marketData');
 
       return positions.map((p: any) => {

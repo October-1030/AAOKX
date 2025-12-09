@@ -3,8 +3,8 @@ import { importHistoricalData, HistoricalDataConfig } from '@/lib/historicalData
 import { BacktestEngine, BacktestConfig } from '@/lib/backtestEngine';
 import { Coin } from '@/types/trading';
 import { calculateAllIndicators } from '@/lib/indicators';
-import { callDeepSeekAPI } from '@/lib/deepseekClient';
-import { parseNOF1Response } from '@/lib/tradingEngine';
+import { callDeepSeek } from '@/lib/deepseekClient';
+import { parseNOF1Response } from '@/lib/tradingPromptNOF1';
 
 export const maxDuration = 300; // 5分钟超时限制
 
@@ -99,7 +99,7 @@ export async function POST(request: NextRequest) {
       const coinsData = [];
 
       for (const [coin, data] of Object.entries(marketData as any)) {
-        const { candles, indicators, currentPrice } = data;
+        const { candles, indicators, currentPrice } = data as any;
 
         // 获取最近10分钟的数据（用于intraday分析）
         const recentCandles = candles.slice(-10);
@@ -133,7 +133,7 @@ Account Balance: $${balance.toFixed(2)}
 Based on this data, make trading decisions for each coin. Provide your response in the nof1.ai format with CHAIN_OF_THOUGHT and TRADING_DECISIONS sections.`;
 
       try {
-        const response = await callDeepSeekAPI(prompt);
+        const response = await callDeepSeek('You are a professional crypto trader.', prompt);
         const decisions = parseNOF1Response(response);
         return decisions;
       } catch (error) {

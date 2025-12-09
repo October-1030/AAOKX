@@ -1,6 +1,16 @@
 /**
  * 风险管理系统
  * 借鉴 Nautilus Trader 的风险管理理念
+ *
+ * NOTE: 系统已重构为 DeepSeek 单模型架构
+ * 决策链：行情 → 指标 → DeepSeek → 风控检查(本模块) → RealTradingExecutor
+ *
+ * 保留的风控功能：
+ * - 最大仓位限制
+ * - 最大持仓数量
+ * - 每日最大亏损
+ * - 单币种亏损限制
+ * - Kelly公式计算
  */
 
 import { Coin, Position, TradingDecision, AccountStatus } from '@/types/trading';
@@ -35,7 +45,7 @@ export const RISK_CONFIG = {
  * 0.0 = 无相关
  * -1.0 = 完全负相关
  */
-const CORRELATION_MATRIX: Record<Coin, Partial<Record<Coin, number>>> = {
+const CORRELATION_MATRIX: Partial<Record<Coin, Partial<Record<Coin, number>>>> = {
   BTC: { BTC: 1.0, ETH: 0.85, SOL: 0.75, BNB: 0.70, DOGE: 0.60, XRP: 0.65 },
   ETH: { BTC: 0.85, ETH: 1.0, SOL: 0.80, BNB: 0.75, DOGE: 0.55, XRP: 0.60 },
   SOL: { BTC: 0.75, ETH: 0.80, SOL: 1.0, BNB: 0.70, DOGE: 0.50, XRP: 0.55 },

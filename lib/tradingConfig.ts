@@ -10,7 +10,7 @@ export interface TradingLimits {
   maxPositionPercent: number; // 单笔最大仓位比例
   maxLeverage: number; // 最大杠杆
   enabledCoins: Coin[]; // 允许交易的币种
-  minOrderSize: Record<Coin, number>; // 每个币种的最小订单量
+  minOrderSize: Partial<Record<Coin, number>>; // 每个币种的最小订单量（只定义支持的币种）
 }
 
 /**
@@ -113,7 +113,7 @@ export function validateOrder(
   }
 
   // 检查最小订单量
-  const minSize = limits.minOrderSize[coin];
+  const minSize = limits.minOrderSize[coin] ?? 5; // 默认最小 $5
   if (size < minSize) {
     return {
       valid: false,
@@ -167,7 +167,7 @@ export function adjustOrderSize(
     return 0;
   }
 
-  const minSize = limits.minOrderSize[coin];
+  const minSize = limits.minOrderSize[coin] ?? 5; // 默认最小 $5
   const maxSize = limits.maxPositionSize;
 
   // 如果小于最小值，返回 0（不交易）

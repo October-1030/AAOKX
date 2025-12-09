@@ -117,7 +117,7 @@ export class PerformanceMonitor extends EventEmitter {
       this.gcObserver.observe({ entryTypes: ['gc'] });
       console.log('✅ [PerformanceMonitor] GC 监控已启用');
     } catch (error) {
-      console.warn('⚠️ [PerformanceMonitor] GC 监控不可用:', error.message);
+      console.warn('⚠️ [PerformanceMonitor] GC 监控不可用:', (error as any).message);
     }
   }
 
@@ -190,7 +190,7 @@ export class PerformanceMonitor extends EventEmitter {
       const heapUsedPercent = (memory.heapUsed / memory.heapTotal) * 100;
       
       // 4. GC 指标
-      const { gcCount, gcDuration } = this.gcMetrics;
+      const { count: gcCount, totalDuration: gcDuration } = this.gcMetrics;
 
       const metrics: PerformanceMetrics = {
         eventLoopLag,

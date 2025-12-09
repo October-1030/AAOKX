@@ -199,12 +199,12 @@ export class HybridTradingEngine {
           coin: pos.coin,
           side: pos.side,
           entryPrice: pos.entryPrice,
-          size: pos.size || 100,
-          leverage: pos.leverage || 1,
-          entryTime: pos.entryTime || Date.now(),
-          maxProfit: pos.maxProfit,
-          currentProfit: pos.unrealizedPnLPercent,
-          exitPlan: pos.exitPlan
+          size: (pos as any).size || 100,
+          leverage: (pos as any).leverage || 1,
+          entryTime: (pos as any).entryTime || Date.now(),
+          maxProfit: (pos as any).maxProfit,
+          currentProfit: (pos as any).unrealizedPnLPercent,
+          exitPlan: (pos as any).exitPlan
         });
 
         if (posResult.success) {
@@ -232,8 +232,8 @@ export class HybridTradingEngine {
   private async getAIDecision(accountState: StrictAccountState): Promise<Result<StrictTradingDecision>> {
     try {
       // 调用原有的AI决策系统
-      await this.legacyEngine.updateMarketData();
-      const decision = await this.legacyEngine.generateTradingDecision('DeepSeek-V3');
+      await (this.legacyEngine as any).updateMarketData();
+      const decision = await (this.legacyEngine as any).generateTradingDecision('DeepSeek-V3');
 
       if (!decision) {
         return Err(new Error('AI未生成有效决策'));
@@ -393,7 +393,7 @@ export class HybridTradingEngine {
     };
 
     const currentPositions = await this.realExecutor.getCurrentPositions();
-    const result = await this.realExecutor.executeDecision('HybridEngine', legacyDecision, currentPositions);
+    const result = await this.realExecutor.executeDecision('HybridEngine', legacyDecision as any, currentPositions);
     
     console.log(`[HybridEngine] ${result.success ? '✅' : '❌'} ${result.message}`);
   }
@@ -429,7 +429,7 @@ export class HybridTradingEngine {
    */
   getSystemStatus(): {
     isRunning: boolean;
-    performanceMetrics: typeof this.performanceMetrics;
+    performanceMetrics: any;
     advancedEngineStatus: any;
     arbitrageStats: any;
   } {

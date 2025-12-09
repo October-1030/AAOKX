@@ -12,7 +12,7 @@ import { Coin } from '@/types/trading';
 /**
  * CoinGecko 币种 ID 映射
  */
-const COINGECKO_IDS: Record<Coin, string> = {
+const COINGECKO_IDS: Partial<Record<Coin, string>> = {
   BTC: 'bitcoin',
   ETH: 'ethereum',
   SOL: 'solana',
@@ -52,7 +52,7 @@ export interface RealTimePrice {
  * @returns 实时价格数据
  */
 export async function getCoinGeckoPrice(coin: Coin): Promise<RealTimePrice> {
-  const coinId = COINGECKO_IDS[coin];
+  const coinId = COINGECKO_IDS[coin] || coin.toLowerCase();
 
   try {
     const url = `https://api.coingecko.com/api/v3/simple/price?ids=${coinId}&vs_currencies=usd&include_24hr_vol=true&include_24hr_change=true`;
@@ -114,7 +114,7 @@ export async function getAllCoinGeckoPrices(coins: Coin[]): Promise<RealTimePric
     const data: CoinGeckoPriceResponse = await response.json();
 
     const prices: RealTimePrice[] = coins.map(coin => {
-      const coinId = COINGECKO_IDS[coin];
+      const coinId = COINGECKO_IDS[coin] || coin.toLowerCase();
       const priceData = data[coinId];
 
       if (!priceData) {

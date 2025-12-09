@@ -36,7 +36,8 @@ const INITIAL_PRICES: Record<Coin, number> = {
   JUP: 0.8, PYTH: 0.4, ONDO: 1.4, ENA: 0.9, JTO: 2.8, W: 0.3, STRK: 0.5, ETHFI: 3.5, BLAST: 0.02
 };
 
-// 真实价格缓存（从 Hyperliquid/CoinGecko 获取）
+// 真实价格缓存（从 OKX/CoinGecko 获取）
+// NOTE: 系统已重构为 OKX-only 架构，Hyperliquid 行情源已移除
 let realPricesCache: Record<Coin, RealTimePrice> | null = null;
 let lastRealPriceFetch = 0;
 const PRICE_FETCH_INTERVAL = 10000; // ✅ 10秒刷新一次（更实时）
@@ -154,8 +155,9 @@ export async function initializeMarketData() {
 }
 
 /**
- * 获取真实价格（优先 Hyperliquid，降级 CoinGecko）
- * 每分钟最多刷新一次
+ * 获取真实价格（OKX 为主，CoinGecko 为备份）
+ * NOTE: 系统已重构为 OKX-only 架构，Hyperliquid 行情源已移除
+ * 每 10 秒最多刷新一次
  */
 async function fetchRealPrices(): Promise<void> {
   const now = Date.now();
@@ -168,19 +170,19 @@ async function fetchRealPrices(): Promise<void> {
   // 仅显示主要6个币种，保持界面简洁
   const coins: Coin[] = ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'AVAX'];
 
-  // 🔥 方案1：优先尝试 Hyperliquid 永续合约价格（和真实交易价格一致）
+  // 🔥 方案1：优先尝试 OKX 合约价格（和真实交易价格一致）
   try {
-    const { getHyperliquidClient } = await import('./hyperliquidClient');
-    const hyperliquid = getHyperliquidClient();
+    const { getOKXClient } = await import('./okxClient');
+    const okx = getOKXClient();
 
-    if (hyperliquid.isAvailable()) {
-      console.log('[MarketData] 🔗 从 Hyperliquid 获取永续合约价格...');
-      const hlPrices = await hyperliquid.getAllMarketPrices();
+    if (okx.isAvailable()) {
+      console.log('[MarketData] 🔗 从 OKX 获取合约价格...');
+      const okxPrices = await okx.getAllMarketPrices();
 
       // 验证价格是否有效（不为null且不为0）
-      if (hlPrices && hlPrices.BTC && hlPrices.BTC > 1000) {
-        const btcPrice = hlPrices.BTC;
-        console.log(`[MarketData] ✅ Hyperliquid 价格获取成功`);
+      if (okxPrices && okxPrices.BTC && okxPrices.BTC > 1000) {
+        const btcPrice = okxPrices.BTC;
+        console.log(`[MarketData] ✅ OKX 价格获取成功`);
         console.log(`[MarketData] 💹 BTC: $${btcPrice.toLocaleString()}`);
 
         // 转换为 RealTimePrice 格式
@@ -188,7 +190,7 @@ async function fetchRealPrices(): Promise<void> {
         coins.forEach(coin => {
           realPricesCache![coin] = {
             coin,
-            price: hlPrices[coin] || 0,
+            price: okxPrices[coin] || 0,
             volume24h: 0,
             change24h: 0,
             timestamp: now,
@@ -198,11 +200,11 @@ async function fetchRealPrices(): Promise<void> {
         lastRealPriceFetch = now;
         return;
       } else {
-        console.warn('[MarketData] ⚠️ Hyperliquid 返回无效价格，降级到 CoinGecko');
+        console.warn('[MarketData] ⚠️ OKX 返回无效价格，降级到 CoinGecko');
       }
     }
   } catch (error) {
-    console.warn('[MarketData] ⚠️ Hyperliquid 获取失败，降级到 CoinGecko:', error);
+    console.warn('[MarketData] ⚠️ OKX 获取失败，降级到 CoinGecko:', error);
   }
 
   // 🌐 方案2：降级到 CoinGecko 现货价格

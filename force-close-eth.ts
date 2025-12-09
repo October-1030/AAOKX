@@ -61,7 +61,7 @@ async function forceCloseETH() {
     const isBuy = !isLong; // 如果是多头需要卖出，如果是空头需要买入
     const limitPrice = isBuy ? ethPrice * 1.02 : ethPrice * 0.98; // 2%滑点确保成交
     
-    const order1 = await hyperliquid.client.exchange.placeOrder({
+    const order1 = await (hyperliquid as any).client.exchange.placeOrder({
       coin: 'ETH-PERP',
       is_buy: isBuy,
       sz: parseFloat(size.toFixed(4)), // ETH精度4位
@@ -89,7 +89,7 @@ async function forceCloseETH() {
       
       console.log(`📝 使用激进市价单平仓剩余 ${remainingSize} ETH...`);
       
-      const order2 = await hyperliquid.client.exchange.placeOrder({
+      const order2 = await (hyperliquid as any).client.exchange.placeOrder({
         coin: 'ETH-PERP',
         is_buy: isBuy,
         sz: parseFloat(remainingSize.toFixed(4)),

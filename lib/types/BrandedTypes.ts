@@ -164,7 +164,7 @@ export class CurrencyConverter {
     fromCurrency: From,
     toCurrency: To
   ): Branded<number, To> {
-    if (fromCurrency === toCurrency) {
+    if (String(fromCurrency) === String(toCurrency)) {
       return amount as any;
     }
 

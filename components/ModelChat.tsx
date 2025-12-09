@@ -1,3 +1,17 @@
+/**
+ * 模型详情组件
+ *
+ * NOTE: 系统已重构为 DeepSeek 单模型架构
+ * 此组件现在只显示 DeepSeek 的详细信息（策略、持仓、决策推理）
+ * 原来的多模型选择器自动简化为只有一个选项
+ *
+ * 显示内容：
+ * - DeepSeek 的当前策略
+ * - 当前持仓详情
+ * - 最新决策推理（Chain of Thought）
+ * - 表现指标
+ */
+
 'use client';
 
 import { useState } from 'react';

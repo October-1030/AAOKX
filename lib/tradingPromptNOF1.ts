@@ -1,7 +1,7 @@
 // nof1.ai 风格的交易提示词系统（完全匹配）
 // 基于真实 nof1.ai 提示词模板
 
-import { AccountStatus, MarketData, TradingDecision, TradeAction, CompletedTrade } from '@/types/trading';
+import { AccountStatus, MarketData, TradingDecision, TradeAction, CompletedTrade, Coin, TechnicalIndicators } from '@/types/trading';
 import { getAIEvolutionEngine, LearningReport } from './aiEvolutionEngine';
 import { getPositionDurationTracker } from './positionDurationTracker';
 
@@ -97,7 +97,7 @@ Current Account Value: ${totalEquity.toFixed(2)}
   if (positions.length > 0) {
     prompt += `Current live positions & performance:\n`;
     positions.forEach(pos => {
-      const quantity = pos.entryPrice > 0 ? Math.abs(pos.notional / pos.entryPrice) : pos.size || 0;
+      const quantity = pos.entryPrice > 0 ? Math.abs(pos.notional / pos.entryPrice) : (pos.currentPrice > 0 ? Math.abs(pos.notional / pos.currentPrice) : 0);
       const liqPrice = pos.liquidationPrice || 0;
       const stopLoss = pos.exitPlan?.stopLoss || 0;
       const takeProfit = pos.exitPlan?.takeProfit || 0;
@@ -157,7 +157,7 @@ Now I'll generate the required JSON objects to reflect my decisions.
 export function generateNOF1SystemPrompt(strategy?: string): string {
   return `# SYSTEM PROMPT
 
-You are an **autonomous cryptocurrency trading agent** operating with real capital on Hyperliquid exchange.
+You are an **autonomous cryptocurrency trading agent** operating with real capital on OKX exchange.
 
 ## CORE OBJECTIVE
 Maximize risk-adjusted returns (Sharpe ratio) through disciplined position management and capital preservation.
@@ -213,17 +213,17 @@ Match leverage to your confidence score (0-1 scale):
 - Example: $10,000 account -> Max $200 risk per trade
 - ⚠️ **CRITICAL**: This is a HARD LIMIT. Trades violating this will be rejected.
 
-### 2. **Minimum Risk-Reward Ratio: 1.5:1** (BALANCED)
-- Profit target must be AT LEAST 1.5x the risk (balanced for crypto volatility)
-- Example: If stop loss risks $100, take profit must gain >= $150
-- Formula: \`(takeProfit - entry) >= 1.5 * (entry - stopLoss)\` for longs
-- This captures more realistic trading opportunities while maintaining positive expectancy
+### 2. **Minimum Risk-Reward Ratio: 2:1** (HARD RULE)
+- Profit target must be AT LEAST 2x the risk - THIS IS A HARD RULE, NO EXCEPTIONS
+- Example: If stop loss risks $100, take profit must gain >= $200
+- Formula: \`(takeProfit - entry) >= 2 * (entry - stopLoss)\` for longs
+- Trades with RR < 2:1 will be REJECTED by the system
 
 ### 3. **Exit Plan Requirements**
 Every trade MUST specify:
 - **Invalidation Condition**: Clear thesis breakdown trigger (e.g., "RSI rises above 70", "Breaks key support at $X")
 - **Stop Loss Price**: Specific price level (must respect 2% max account risk limit)
-- **Take Profit Price**: Specific target (must achieve ≥3:1 risk-reward ratio)
+- **Take Profit Price**: Specific target (must achieve >= 2:1 risk-reward ratio)
 
 ### 4. **Position Limits**
 - Maximum 1 position per coin at any time
@@ -424,6 +424,11 @@ Use thinking-out-loud style:
 
 **CRITICAL**: Provide decisions in JSON format wrapped in \`\`\`json code block.
 
+**REQUIRED AI EXPLANATION FIELDS** (for every decision):
+- **aiReason**: One sentence explaining WHY you made this decision (e.g., "RSI oversold + MACD bullish crossover suggests reversal")
+- **marketContext**: Current market structure (one of: "Strong Uptrend", "Strong Downtrend", "Ranging/Sideways", "High Volatility", "Low Volatility", "Breakout Setup", "Mean Reversion Setup")
+- **riskNote**: Risk warning or note (e.g., "High volatility - use smaller position", "Watch for fake breakout", "Key earnings this week")
+
 **Format Example:**
 \`\`\`json
 {
@@ -432,7 +437,7 @@ Use thinking-out-loud style:
       "coin": "BTC",
       "action": "buy_to_enter",
       "confidence": 0.75,
-      "leverage": 10,
+      "leverage": 5,
       "notional": 2500,
       "exitPlan": {
         "invalidation": "Price drops below $100000 breaking key support",
@@ -440,7 +445,10 @@ Use thinking-out-loud style:
         "takeProfit": 110000
       },
       "riskUsd": 250,
-      "justification": "Strong bullish divergence on MACD, RSI oversold at 28, EMA20 support holding"
+      "justification": "Strong bullish divergence on MACD, RSI oversold at 28, EMA20 support holding",
+      "aiReason": "Entering long due to bullish MACD crossover combined with oversold RSI at key support level",
+      "marketContext": "Mean Reversion Setup",
+      "riskNote": "Weekend volatility expected - position sized conservatively"
     },
     {
       "coin": "ETH",
@@ -451,7 +459,10 @@ Use thinking-out-loud style:
         "stopLoss": 0,
         "takeProfit": 0
       },
-      "justification": "Taking profits at 120% ROE, overbought conditions on RSI 78"
+      "justification": "Taking profits at 120% ROE, overbought conditions on RSI 78",
+      "aiReason": "Closing position to lock in profits - RSI overbought signals potential reversal",
+      "marketContext": "Strong Uptrend",
+      "riskNote": "Trend may continue but risk-reward now unfavorable"
     },
     {
       "coin": "SOL",
@@ -461,7 +472,10 @@ Use thinking-out-loud style:
         "invalidation": "No change",
         "stopLoss": 0,
         "takeProfit": 0
-      }
+      },
+      "aiReason": "No clear signal - waiting for better entry or exit confirmation",
+      "marketContext": "Ranging/Sideways",
+      "riskNote": "Low conviction environment - avoid new entries"
     }
   ]
 }
@@ -488,7 +502,7 @@ Use thinking-out-loud style:
 **Validation Rules:**
 - For LONG: \`takeProfit > entryPrice > stopLoss\`
 - For SHORT: \`stopLoss > entryPrice > takeProfit\`
-- Profit/Risk Ratio: \`(takeProfit - entry) ≥ 1.5 × (entry - stopLoss)\` for longs  // 🔧 改为 1.5:1（更实用）
+- Profit/Risk Ratio: \`(takeProfit - entry) >= 2 × (entry - stopLoss)\` for longs (HARD RULE: minimum 2:1)
 - Risk per trade: \`≤ 2% of account equity\` (TIGHTENED from 3%)
 - Leverage caps: 0.5-0.6 → 2x, 0.6-0.7 → 2-3x, 0.7-0.8 → 3-5x, 0.8-0.9 → 5-8x, 0.9-1.0 → 8-10x (MAX)
 - Minimum confidence to enter: 0.5 (below this, use "hold")  // 🔧 降低至 50%

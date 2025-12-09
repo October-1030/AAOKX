@@ -130,6 +130,11 @@ export interface TradingDecision {
   };
   riskUsd?: number;     // 可选：该笔交易的美元风险额
   justification?: string; // 可选：决策理由（最多 500 字符）
+
+  // AI 解释字段（DeepSeek 输出）
+  aiReason?: string;       // AI 决策原因：一句话说明为什么这么做
+  marketContext?: string;  // 市场结构判断：区间震荡 / 强趋势 / 高波动 等
+  riskNote?: string;       // 风险提示：波动大时的警告等
 }
 
 export interface ChainOfThought {

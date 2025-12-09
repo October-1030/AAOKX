@@ -25,7 +25,7 @@ export interface HistoricalDataResult {
 }
 
 // OKX 币种映射
-const OKX_SYMBOL_MAP: Record<Coin, string> = {
+const OKX_SYMBOL_MAP: Partial<Record<Coin, string>> = {
   BTC: 'BTC-USDT-SWAP',
   ETH: 'ETH-USDT-SWAP',
   SOL: 'SOL-USDT-SWAP',
@@ -97,7 +97,7 @@ const OKX_SYMBOL_MAP: Record<Coin, string> = {
 };
 
 // Binance 币种映射
-const BINANCE_SYMBOL_MAP: Record<Coin, string> = {
+const BINANCE_SYMBOL_MAP: Partial<Record<Coin, string>> = {
   BTC: 'BTCUSDT',
   ETH: 'ETHUSDT',
   SOL: 'SOLUSDT',

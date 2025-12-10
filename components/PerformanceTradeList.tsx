@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import type { MarketRegime, StrategyFlavor } from '@/types/trading';
 
 interface TradeRecord {
   id: string;
@@ -22,6 +23,8 @@ interface TradeRecord {
   riskNote?: string;
   modelName?: string;
   confidence?: number;
+  regime?: MarketRegime;
+  strategyFlavor?: StrategyFlavor;
 }
 
 interface TradeStats {
@@ -55,6 +58,33 @@ export default function PerformanceTradeList({ trades: propTrades, stats: propSt
   const [trades, setTrades] = useState<TradeRecord[]>(propTrades || []);
   const [stats, setStats] = useState<TradeStats>(propStats || defaultStats);
   const [loading, setLoading] = useState(!propTrades);
+
+  // Regime badge styles
+  const regimeBadgeClass: Record<string, string> = {
+    UPTREND: 'bg-green-100 text-green-800',
+    DOWNTREND: 'bg-red-100 text-red-800',
+    RANGING: 'bg-yellow-100 text-yellow-800',
+    CHOPPY: 'bg-purple-100 text-purple-800',
+    LOW_VOL: 'bg-gray-100 text-gray-700',
+  };
+
+  // Strategy badge styles
+  const strategyBadgeClass: Record<string, string> = {
+    TREND_FOLLOWING: 'bg-emerald-100 text-emerald-800',
+    MEAN_REVERSION: 'bg-sky-100 text-sky-800',
+    SCALPING: 'bg-pink-100 text-pink-800',
+    BREAKOUT: 'bg-orange-100 text-orange-800',
+    NO_TRADE: 'bg-gray-100 text-gray-700',
+  };
+
+  function formatStrategyLabel(strategy?: string) {
+    if (!strategy) return 'N/A';
+    return strategy
+      .toLowerCase()
+      .split('_')
+      .map((s) => s[0].toUpperCase() + s.slice(1))
+      .join(' ');
+  }
 
   useEffect(() => {
     // 如果没有传入 props，则自己 fetch
@@ -192,10 +222,34 @@ export default function PerformanceTradeList({ trades: propTrades, stats: propSt
                   </td>
 
                   {/* Status */}
-                  <td className="px-3 py-2 text-center">
-                    <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getStatusBadge(trade.status)}`}>
-                      {getStatusLabel(trade.status)}
-                    </span>
+                  <td className="px-3 py-2">
+                    <div className="space-y-1">
+                      <div className="text-center">
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getStatusBadge(trade.status)}`}>
+                          {getStatusLabel(trade.status)}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1 justify-center">
+                        {trade.regime && (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              regimeBadgeClass[trade.regime] || 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {trade.regime}
+                          </span>
+                        )}
+                        {trade.strategyFlavor && (
+                          <span
+                            className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                              strategyBadgeClass[trade.strategyFlavor] || 'bg-gray-100 text-gray-700'
+                            }`}
+                          >
+                            {formatStrategyLabel(trade.strategyFlavor)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
                   </td>
 
                   {/* AI Reason */}

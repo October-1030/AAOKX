@@ -394,6 +394,51 @@ Exit Plan:
 
 ---
 
+## MARKET REGIME CLASSIFICATION (MANDATORY)
+
+You MUST classify the current market regime **before** deciding any trade.
+
+Allowed market regimes (exact string values):
+
+- "UPTREND"   → Strong bullish trend (higher highs, EMAs aligned up, MACD > 0, ADX ≥ 22)
+- "DOWNTREND" → Strong bearish trend (lower lows, EMAs aligned down, MACD < 0, ADX ≥ 22)
+- "RANGING"   → Sideways range, weak trend (ADX < 18, price oscillating around mid EMAs)
+- "CHOPPY"    → Volatile fake-breakout zone (EMAs tightly clustered, ATR% high, RSI 40–60)
+- "LOW_VOL"   → Low volatility, low edge (ATR% very small, price barely moves)
+
+Rules:
+1. If ADX < 18 and ATR% is small → "RANGING" or "LOW_VOL"
+2. If EMAs tightly clustered + high ATR% + RSI 40–60 → "CHOPPY"
+3. If EMAs aligned + MACD matches + ADX ≥ 22:
+   - above EMAs: "UPTREND"
+   - below EMAs: "DOWNTREND"
+
+You MUST output:
+"regime": "UPTREND" | "DOWNTREND" | "RANGING" | "CHOPPY" | "LOW_VOL"
+
+
+## STRATEGY FLAVOR SELECTION
+
+Allowed strategy flavors:
+
+- "TREND_FOLLOWING"
+- "MEAN_REVERSION"
+- "SCALPING"
+- "BREAKOUT"
+- "NO_TRADE"
+
+Rules:
+1. UPTREND/DOWNTREND → TREND_FOLLOWING only
+2. RANGING → MEAN_REVERSION only at extremes (RSI < 30 or > 70)
+3. CHOPPY → Almost always NO_TRADE
+4. LOW_VOL → Prefer NO_TRADE
+
+You MUST output:
+
+"strategyFlavor": "TREND_FOLLOWING" | "MEAN_REVERSION" | "SCALPING" | "BREAKOUT" | "NO_TRADE"
+
+---
+
 # OUTPUT FORMAT
 
 Provide your response in TWO parts:
@@ -434,21 +479,23 @@ Use thinking-out-loud style:
 {
   "decisions": [
     {
-      "coin": "BTC",
+      "coin": "BNB",
       "action": "buy_to_enter",
-      "confidence": 0.75,
-      "leverage": 5,
-      "notional": 2500,
+      "confidence": 0.78,
+      "leverage": 3,
+      "notional": 50,
       "exitPlan": {
-        "invalidation": "Price drops below $100000 breaking key support",
-        "stopLoss": 100000,
-        "takeProfit": 110000
+        "invalidation": "Breaks below key support at $880 with strong volume",
+        "stopLoss": 880.0,
+        "takeProfit": 930.0
       },
-      "riskUsd": 250,
-      "justification": "Strong bullish divergence on MACD, RSI oversold at 28, EMA20 support holding",
-      "aiReason": "Entering long due to bullish MACD crossover combined with oversold RSI at key support level",
-      "marketContext": "Mean Reversion Setup",
-      "riskNote": "Weekend volatility expected - position sized conservatively"
+      "riskUsd": 10,
+      "justification": "Uptrend pullback with confluence.",
+      "aiReason": "Entering long in confirmed uptrend.",
+      "marketContext": "Strong Uptrend",
+      "riskNote": "Volatility elevated.",
+      "regime": "UPTREND",
+      "strategyFlavor": "TREND_FOLLOWING"
     },
     {
       "coin": "ETH",
@@ -462,7 +509,9 @@ Use thinking-out-loud style:
       "justification": "Taking profits at 120% ROE, overbought conditions on RSI 78",
       "aiReason": "Closing position to lock in profits - RSI overbought signals potential reversal",
       "marketContext": "Strong Uptrend",
-      "riskNote": "Trend may continue but risk-reward now unfavorable"
+      "riskNote": "Trend may continue but risk-reward now unfavorable",
+      "regime": "UPTREND",
+      "strategyFlavor": "TREND_FOLLOWING"
     },
     {
       "coin": "SOL",
@@ -475,7 +524,9 @@ Use thinking-out-loud style:
       },
       "aiReason": "No clear signal - waiting for better entry or exit confirmation",
       "marketContext": "Ranging/Sideways",
-      "riskNote": "Low conviction environment - avoid new entries"
+      "riskNote": "Low conviction environment - avoid new entries",
+      "regime": "RANGING",
+      "strategyFlavor": "NO_TRADE"
     }
   ]
 }

@@ -5,6 +5,8 @@ import Link from 'next/link';
 import PerformanceEquityCurve from '@/components/PerformanceEquityCurve';
 import PerformancePnlSummary from '@/components/PerformancePnlSummary';
 import PerformanceTradeList from '@/components/PerformanceTradeList';
+import PerformanceRegimeOverview from '@/components/PerformanceRegimeOverview';
+import PerformanceRegimeDetailWrapper from '@/components/PerformanceRegimeDetailWrapper';
 
 // localStorage key for OKX API config
 const OKX_API_CONFIG_KEY = 'okxApiConfig';
@@ -324,6 +326,19 @@ export default function PerformancePage() {
             <div className="h-64">
               <PerformancePnlSummary />
             </div>
+          </div>
+        </div>
+
+        {/* Regime & Strategy Analysis */}
+        <div className="bg-white rounded-xl p-5 shadow-sm border border-gray-100 mb-6">
+          <h2 className="text-sm font-semibold text-gray-900 mb-4">
+            Regime & Strategy Analysis
+          </h2>
+          <PerformanceRegimeOverview />
+
+          {/* Regime × Strategy Detail Table */}
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <PerformanceRegimeDetailWrapper />
           </div>
         </div>
 

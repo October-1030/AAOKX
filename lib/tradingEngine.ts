@@ -24,6 +24,7 @@ import { getTradingStorage } from './persistence/storage';
 import { getRiskManager } from './riskManagement';
 import { getEventBus } from './events/eventBus';
 import { TradingEventType } from './events/types';
+import { analyzeMarketRegime, createRegimeContext } from './marketRegimeEnhanced';
 
 const INITIAL_CAPITAL = 1000; // 模拟模式默认初始资金（真实交易模式下会动态获取）
 const MAKER_FEE = -0.0002; // 返佣
@@ -511,6 +512,56 @@ export class TradingEngineState {
 
     // 执行交易决策
     for (const decision of decisions) {
+      // 🎯 市场状态检测与过滤
+      const coinMarketData = marketData.find(d => d.coin === decision.coin);
+      if (coinMarketData) {
+        try {
+          // 创建市场状态上下文
+          const regimeContext = createRegimeContext(coinMarketData.current);
+          const regimeAnalysis = analyzeMarketRegime(regimeContext);
+
+          // 记录市场状态到决策对象
+          decision.regime = regimeAnalysis.regime;
+          decision.strategyFlavor = regimeAnalysis.recommendedStrategy;
+
+          console.log(`[RegimeFilter] ${decision.coin}: ${regimeAnalysis.regime} (${(regimeAnalysis.confidence * 100).toFixed(0)}% conf) → ${regimeAnalysis.recommendedStrategy}`);
+
+          // ✅ 规则1: CHOPPY 或 LOW_VOL 市场 → 强制 HOLD
+          if ((regimeAnalysis.regime === 'CHOPPY' || regimeAnalysis.regime === 'LOW_VOL') && decision.action !== 'hold') {
+            console.warn(`[RegimeFilter] ⚠️  ${decision.coin}: ${regimeAnalysis.regime} 市场不适合交易，强制 HOLD`);
+            console.warn(`[RegimeFilter]    原因: ${regimeAnalysis.reasoning}`);
+            decision.action = 'hold';
+          }
+
+          // ✅ 规则2: 只在 UPTREND 做多，只在 DOWNTREND 做空
+          if (decision.action === 'buy_to_enter' && regimeAnalysis.regime !== 'UPTREND') {
+            console.warn(`[RegimeFilter] ⚠️  ${decision.coin}: 非上升趋势(${regimeAnalysis.regime})，不做多，强制 HOLD`);
+            decision.action = 'hold';
+          }
+
+          if (decision.action === 'sell_to_enter' && regimeAnalysis.regime !== 'DOWNTREND') {
+            console.warn(`[RegimeFilter] ⚠️  ${decision.coin}: 非下降趋势(${regimeAnalysis.regime})，不做空，强制 HOLD`);
+            decision.action = 'hold';
+          }
+
+          // ✅ 规则3: 震荡市场只在极端位置反转
+          if (regimeAnalysis.regime === 'RANGING' && !regimeAnalysis.shouldTrade && decision.action !== 'hold') {
+            console.warn(`[RegimeFilter] ⚠️  ${decision.coin}: RANGING 市场无极端信号，强制 HOLD`);
+            console.warn(`[RegimeFilter]    原因: ${regimeAnalysis.reasoning}`);
+            decision.action = 'hold';
+          }
+
+          // 记录过滤后的决策
+          if (decision.action !== 'hold') {
+            console.log(`[RegimeFilter] ✅ ${decision.coin}: ${decision.action} 通过市场状态检查`);
+          }
+        } catch (error) {
+          console.error(`[RegimeFilter] ❌ ${decision.coin}: 市场状态分析失败:`, error);
+          // 分析失败时，保守处理：强制 HOLD
+          decision.action = 'hold';
+        }
+      }
+
       // 📡 发出AI决策事件
       this.eventBus.emitSync({
         type: TradingEventType.AI_DECISION_MADE,

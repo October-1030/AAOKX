@@ -1,6 +1,9 @@
 @echo off
 echo ========================================
-echo  Alpha Arena Clone - 启动脚本
+echo  Alpha Arena Clone - OKX真实交易
+echo ========================================
+echo  交易所: OKX (LIVE TRADING)
+echo  警告: 真实资金交易环境
 echo ========================================
 echo.
 
@@ -19,6 +22,8 @@ echo.
 echo ========================================
 echo  服务器启动中...
 echo  访问地址: http://localhost:3000
+echo  交易所: OKX (真实交易)
+echo  警告: 请谨慎操作真实资金
 echo ========================================
 echo.
 

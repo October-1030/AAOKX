@@ -49,19 +49,10 @@ async function closeAllOKXPositions() {
       console.log(`   未实现盈亏: ${upl >= 0 ? '+' : ''}$${upl.toFixed(2)}`);
 
       try {
-        // 平仓 = 反向下单
-        const closeSide = pos > 0 ? 'sell' : 'buy';
-        const result = await okx.request('POST', '/api/v5/trade/close-position', {
-          instId: instId,
-          mgnMode: 'isolated',
-          ccy: 'USDT',
-        });
-
-        if (result.code === '0') {
-          console.log(`✅ ${instId} 平仓成功`);
-        } else {
-          console.log(`⚠️ ${instId} 平仓返回: ${result.msg || result.code}`);
-        }
+        // 使用公开的 closePosition 方法
+        const coin = instId.replace('-USDT-SWAP', '') as any;
+        await okx.closePosition(coin);
+        console.log(`✅ ${instId} 平仓成功`);
       } catch (error) {
         console.error(`❌ ${instId} 平仓失败:`, error);
       }

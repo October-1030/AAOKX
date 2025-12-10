@@ -25,6 +25,22 @@ export type TradeSide = 'LONG' | 'SHORT';
 // nof1.ai 真实动作类型（基于逆向工程）
 export type TradeAction = 'buy_to_enter' | 'sell_to_enter' | 'hold' | 'close';
 
+// ✅ 新增：市场状态类型
+export type MarketRegime =
+  | 'UPTREND'      // 强趋势上涨
+  | 'DOWNTREND'    // 强趋势下跌
+  | 'RANGING'      // 震荡区间
+  | 'CHOPPY'       // 假突破 / 狗庄洗盘
+  | 'LOW_VOL';     // 低波动，没啥机会
+
+// ✅ 新增：策略风格类型
+export type StrategyFlavor =
+  | 'TREND_FOLLOWING'   // 趋势跟随
+  | 'MEAN_REVERSION'    // 反转 / 抄底逃顶
+  | 'SCALPING'          // 超短线
+  | 'BREAKOUT'          // 突破交易
+  | 'NO_TRADE';         // 仅做分析，不开仓
+
 export interface TechnicalIndicators {
   price: number;
   ema_20: number;
@@ -135,6 +151,10 @@ export interface TradingDecision {
   aiReason?: string;       // AI 决策原因：一句话说明为什么这么做
   marketContext?: string;  // 市场结构判断：区间震荡 / 强趋势 / 高波动 等
   riskNote?: string;       // 风险提示：波动大时的警告等
+
+  // ✅ AI 认知层：明确标注市场状态判断和策略类型
+  regime?: MarketRegime;        // AI 对当前市场状态的判断
+  strategyFlavor?: StrategyFlavor;  // AI 使用的策略类型
 }
 
 export interface ChainOfThought {

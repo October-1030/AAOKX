@@ -6,7 +6,7 @@
  * 未来可替换为数据库存储（Prisma/PostgreSQL）
  */
 
-import { Coin } from '@/types/trading';
+import { Coin, MarketRegime, StrategyFlavor } from '@/types/trading';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -52,6 +52,8 @@ export interface TradeRecord {
   // 附加信息
   modelName?: string;            // AI 模型名称
   confidence?: number;           // AI 置信度
+  regime?: MarketRegime;         // 市场状态
+  strategyFlavor?: StrategyFlavor; // 策略类型
 }
 
 /**

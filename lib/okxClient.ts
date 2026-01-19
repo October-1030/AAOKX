@@ -604,6 +604,62 @@ export class OKXClient {
   }
 
   /**
+   * 部分平仓（期货合约）
+   * @param coin 币种
+   * @param percentage 平仓百分比 (0-100)
+   */
+  async partialClosePosition(coin: Coin, percentage: number) {
+    if (!this.isAvailable()) {
+      throw new Error('OKX 客户端未初始化');
+    }
+
+    if (percentage <= 0 || percentage > 100) {
+      throw new Error(`无效的平仓百分比: ${percentage}%`);
+    }
+
+    const symbol = COIN_TO_OKX_SYMBOL[coin];
+    console.log(`[OKX] 🔄 部分平仓: ${symbol} ${percentage}%`);
+
+    try {
+      // 获取当前持仓
+      const positions = await this.request('GET', '/api/v5/account/positions', { instId: symbol });
+      const position = positions.data?.[0];
+
+      if (!position || parseFloat(position.pos) === 0) {
+        console.log(`[OKX] ⚠️ ${coin} 无持仓需要平仓`);
+        return null;
+      }
+
+      const currentPos = Math.abs(parseFloat(position.pos));
+      const closeSize = Math.floor(currentPos * (percentage / 100)); // 向下取整
+
+      if (closeSize < 1) {
+        console.log(`[OKX] ⚠️ 平仓数量不足1张合约，跳过`);
+        return null;
+      }
+
+      const tdMode = position.mgnMode || 'isolated';
+      console.log(`[OKX] 📊 持仓: ${currentPos}张, 平仓: ${closeSize}张 (${percentage}%)`);
+
+      // 部分平仓订单
+      const closeOrder = await this.request('POST', '/api/v5/trade/order', {
+        instId: symbol,
+        tdMode: tdMode,
+        side: parseFloat(position.pos) > 0 ? 'sell' : 'buy',
+        ordType: 'market',
+        sz: closeSize.toString(),
+        reduceOnly: true,
+      });
+
+      console.log(`[OKX] ✅ ${symbol} 部分平仓成功 (${closeSize}张)`);
+      return closeOrder;
+    } catch (error) {
+      console.error(`[OKX] ❌ ${coin} 部分平仓失败:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * 平仓（现货）- 使用市价卖单
    */
   async closeSpotPosition(coin: Coin, size: number) {

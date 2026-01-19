@@ -25,6 +25,10 @@ interface TradeRecord {
 
 // 转换 API 返回的 TradeRecord 到 Performance 统一的 Trade 格式
 function convertToTrades(records: TradeRecord[]): Trade[] {
+  // 验证 MarketRegime 类型
+  const validRegimes = ['UPTREND', 'DOWNTREND', 'RANGING', 'CHOPPY', 'LOW_VOL'];
+  const validFlavors = ['TREND_FOLLOWING', 'MEAN_REVERSION', 'SCALPING', 'BREAKOUT', 'NO_TRADE'];
+
   return records
     .filter(r => r.status !== 'open' && r.exitPrice && r.closedAt) // 只包含已关闭的交易
     .map(r => ({
@@ -39,9 +43,9 @@ function convertToTrades(records: TradeRecord[]): Trade[] {
       exitTime: new Date(r.closedAt!).toISOString(),
       pnl: r.realizedPnl || 0,
       realizedPnl: r.realizedPnl,
-      status: r.status as any,
-      regime: r.regime,
-      strategyFlavor: r.strategyFlavor,
+      status: r.status as Trade['status'],
+      regime: (r.regime && validRegimes.includes(r.regime) ? r.regime : undefined) as Trade['regime'],
+      strategyFlavor: (r.strategyFlavor && validFlavors.includes(r.strategyFlavor) ? r.strategyFlavor : undefined) as Trade['strategyFlavor'],
       notional: r.notional || 0,
       leverage: r.leverage,
       qty: r.notional ? r.notional / r.entryPrice : 0,

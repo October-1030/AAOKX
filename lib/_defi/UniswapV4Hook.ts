@@ -313,6 +313,88 @@ export class TWAMMHook extends BaseV4Hook {
 }
 
 /**
+ * 波动率数据源接口
+ */
+export interface VolatilityOracle {
+  getVolatility(token: Address): Promise<number>; // 返回年化波动率 (0-1)
+  isAvailable(): boolean;
+}
+
+/**
+ * 简单波动率计算器（基于历史价格）
+ * 在没有 Chainlink 预言机时作为后备方案
+ */
+export class SimpleVolatilityCalculator implements VolatilityOracle {
+  private priceHistory: Map<string, number[]> = new Map();
+  private readonly windowSize = 24; // 24小时窗口
+
+  async getVolatility(token: Address): Promise<number> {
+    const prices = this.priceHistory.get(token) || [];
+    if (prices.length < 2) return 0.3; // 默认 30% 年化波动率
+
+    // 计算对数收益率的标准差
+    const returns: number[] = [];
+    for (let i = 1; i < prices.length; i++) {
+      returns.push(Math.log(prices[i] / prices[i - 1]));
+    }
+
+    const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+    const variance = returns.reduce((a, b) => a + (b - mean) ** 2, 0) / returns.length;
+    const hourlyVol = Math.sqrt(variance);
+
+    // 年化波动率 = 小时波动率 * sqrt(8760)
+    return Math.min(hourlyVol * Math.sqrt(8760), 2.0); // 上限 200%
+  }
+
+  updatePrice(token: Address, price: number): void {
+    let prices = this.priceHistory.get(token);
+    if (!prices) {
+      prices = [];
+      this.priceHistory.set(token, prices);
+    }
+    prices.push(price);
+    if (prices.length > this.windowSize) {
+      prices.shift();
+    }
+  }
+
+  isAvailable(): boolean {
+    return true;
+  }
+}
+
+/**
+ * Chainlink 波动率预言机适配器
+ */
+export class ChainlinkVolatilityOracle implements VolatilityOracle {
+  private chainlinkAddress: Address;
+  private fallback: SimpleVolatilityCalculator;
+
+  constructor(chainlinkAddress: Address) {
+    this.chainlinkAddress = chainlinkAddress;
+    this.fallback = new SimpleVolatilityCalculator();
+  }
+
+  async getVolatility(token: Address): Promise<number> {
+    try {
+      // 实际部署时，这里应该调用 Chainlink 合约
+      // const volatility = await this.readChainlink(token);
+      // return volatility;
+
+      // 目前使用后备计算器
+      return await this.fallback.getVolatility(token);
+    } catch (error) {
+      logger.warn('Chainlink 波动率获取失败，使用后备方案', { token, error });
+      return await this.fallback.getVolatility(token);
+    }
+  }
+
+  isAvailable(): boolean {
+    return this.chainlinkAddress !== '0x0000000000000000000000000000000000000000';
+  }
+}
+
+/**
  * 动态费用 Hook
  * 基于市场条件自动调整池子费用
  */
@@ -320,7 +402,15 @@ export class DynamicFeeHook extends BaseV4Hook {
   private baseFee: number = 3000; // 0.3%
   private volatilityMultiplier: number = 2;
   private volumeThreshold: SafePrice = new SafePrice('1000000000000000000000'); // 1000 ETH
-  
+  private volatilityOracle: VolatilityOracle;
+  private volatilityCache: Map<string, { value: number; timestamp: number }> = new Map();
+  private readonly cacheTTL = 60000; // 1分钟缓存
+
+  constructor(poolManager: Address, volatilityOracle?: VolatilityOracle) {
+    super(poolManager);
+    this.volatilityOracle = volatilityOracle || new SimpleVolatilityCalculator();
+  }
+
   getHookPermissions(): HookPermissions {
     return {
       beforeInitialize: false,
@@ -373,16 +463,76 @@ export class DynamicFeeHook extends BaseV4Hook {
   private calculateDynamicFee(params: SwapParams): number {
     // 基于交易量调整
     const isLargeTrade = params.params.amountSpecified.greaterThan(this.volumeThreshold);
-    
+
     if (isLargeTrade) {
       // 大额交易收取更高费用
       return this.baseFee * this.volatilityMultiplier;
     }
-    
-    // TODO: 集成波动率数据源
-    // 这里可以接入 Chainlink 或其他预言机获取波动率
-    
+
+    // 获取缓存的波动率或使用默认值
+    const token = params.params.zeroForOne ? params.key.currency0 : params.key.currency1;
+    const cachedVol = this.volatilityCache.get(token);
+
+    if (cachedVol && Date.now() - cachedVol.timestamp < this.cacheTTL) {
+      // 使用缓存的波动率调整费用
+      return this.calculateFeeFromVolatility(cachedVol.value);
+    }
+
+    // 异步更新波动率缓存（不阻塞当前交易）
+    this.updateVolatilityCache(token).catch(() => {});
+
     return this.baseFee;
+  }
+
+  /**
+   * 根据波动率计算动态费用
+   * 波动率越高，费用越高（保护LP）
+   */
+  private calculateFeeFromVolatility(volatility: number): number {
+    // 波动率 < 30%: 基础费用
+    // 波动率 30-60%: 1.5x 费用
+    // 波动率 60-100%: 2x 费用
+    // 波动率 > 100%: 3x 费用
+
+    if (volatility < 0.3) {
+      return this.baseFee;
+    } else if (volatility < 0.6) {
+      return Math.floor(this.baseFee * 1.5);
+    } else if (volatility < 1.0) {
+      return Math.floor(this.baseFee * 2);
+    } else {
+      return Math.floor(this.baseFee * 3);
+    }
+  }
+
+  /**
+   * 异步更新波动率缓存
+   */
+  private async updateVolatilityCache(token: Address): Promise<void> {
+    if (!this.volatilityOracle.isAvailable()) return;
+
+    try {
+      const volatility = await this.volatilityOracle.getVolatility(token);
+      this.volatilityCache.set(token, {
+        value: volatility,
+        timestamp: Date.now()
+      });
+
+      logger.debug('波动率缓存更新', {
+        token,
+        volatility: (volatility * 100).toFixed(1) + '%'
+      });
+    } catch (error) {
+      logger.warn('波动率更新失败', { token, error });
+    }
+  }
+
+  /**
+   * 手动设置波动率预言机
+   */
+  setVolatilityOracle(oracle: VolatilityOracle): void {
+    this.volatilityOracle = oracle;
+    this.volatilityCache.clear();
   }
 }
 

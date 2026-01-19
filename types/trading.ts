@@ -217,6 +217,22 @@ export interface CompletedTrade {
   tradeHash?: string;      // SHA-256 哈希，唯一标识此交易
   blockHash?: string;      // 所属区块的哈希（用于分组）
   verified?: boolean;      // 是否已验证
+
+  // 入场时技术指标快照（用于AI学习分析）
+  entryIndicators?: {
+    rsi: number;
+    rsi_7: number;
+    macd: number;
+    macd_histogram: number;
+    ema_20: number;
+    ema_50: number;
+    ema_200: number;
+    atr: number;
+    volume_ratio: number;
+    zScore?: number;
+    marketRegime?: 'RANGING' | 'TRENDING';
+    adx?: number;
+  };
 }
 
 /**

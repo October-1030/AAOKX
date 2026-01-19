@@ -56,6 +56,10 @@ dev.db
 prisma/*.db
 prisma/*.db-journal
 
+# Data storage (JSON persistence)
+/data/
+/logs/learning/
+
 # Temp files
 nul
 *.txt

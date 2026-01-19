@@ -166,15 +166,62 @@ export class AIEvolutionEngine {
   }
 
   /**
-   * 分析入场条件（简化版）
-   * 实际应该从交易记录中提取当时的技术指标
+   * 分析入场条件
+   * 从交易记录中提取入场时的技术指标状态
    */
   private analyzeEntryConditions(trades: CompletedTrade[]): TradingPattern['entryConditions'] {
-    // TODO: 如果CompletedTrade中存储了入场时的技术指标，这里可以提取
-    // 目前返回简化版本
+    // 统计各指标状态的出现频率
+    const rsiStates: Record<string, number> = {};
+    const macdStates: Record<string, number> = {};
+    const emaStates: Record<string, number> = {};
+    const regimeStates: Record<string, number> = {};
+    const zScoreStates: Record<string, number> = {};
+
+    for (const trade of trades) {
+      const indicators = trade.entryIndicators;
+      if (!indicators) continue;
+
+      // RSI 状态分类
+      const rsiState = indicators.rsi < 30 ? '超卖 (<30)' : indicators.rsi > 70 ? '超买 (>70)' : '中性';
+      rsiStates[rsiState] = (rsiStates[rsiState] || 0) + 1;
+
+      // MACD 状态分类
+      const macdState = indicators.macd_histogram > 0.5 ? '金叉' : indicators.macd_histogram < -0.5 ? '死叉' : '中性';
+      macdStates[macdState] = (macdStates[macdState] || 0) + 1;
+
+      // EMA 排列分类
+      const emaAligned = indicators.ema_20 > indicators.ema_50 && indicators.ema_50 > indicators.ema_200;
+      const emaBearish = indicators.ema_20 < indicators.ema_50 && indicators.ema_50 < indicators.ema_200;
+      const emaState = emaAligned ? '多头排列' : emaBearish ? '空头排列' : '混合';
+      emaStates[emaState] = (emaStates[emaState] || 0) + 1;
+
+      // 市场状态
+      if (indicators.marketRegime) {
+        const regime = indicators.marketRegime === 'TRENDING' ? '趋势' : '震荡';
+        regimeStates[regime] = (regimeStates[regime] || 0) + 1;
+      }
+
+      // Z-Score 状态
+      if (indicators.zScore !== undefined) {
+        const zState = indicators.zScore < -2 ? '极端超卖 (<-2)' :
+                       indicators.zScore > 2 ? '极端超买 (>2)' : '中性';
+        zScoreStates[zState] = (zScoreStates[zState] || 0) + 1;
+      }
+    }
+
+    // 找出最常见的状态
+    const getMostCommon = (states: Record<string, number>): string | undefined => {
+      const entries = Object.entries(states);
+      if (entries.length === 0) return undefined;
+      return entries.sort((a, b) => b[1] - a[1])[0][0];
+    };
+
     return {
-      // 这里应该从trades中提取实际的技术指标状态
-      // 作为占位符，返回空对象
+      rsi: getMostCommon(rsiStates),
+      macd: getMostCommon(macdStates),
+      emaAlignment: getMostCommon(emaStates),
+      marketRegime: getMostCommon(regimeStates),
+      zScore: getMostCommon(zScoreStates),
     };
   }
 
@@ -357,7 +404,7 @@ You have completed ${report.analyzedTrades} trades with an overall win rate of $
   }
 
   /**
-   * 保存学习报告到日志（可选）
+   * 保存学习报告到日志文件
    */
   async saveReport(report: LearningReport, filename?: string): Promise<void> {
     const timestamp = new Date().toISOString();
@@ -366,8 +413,54 @@ You have completed ${report.analyzedTrades} trades with an overall win rate of $
       ...report,
     };
 
-    // TODO: 保存到文件或数据库
-    console.log('[AIEvolution] 📄 学习报告:', JSON.stringify(logData, null, 2));
+    // 保存到文件
+    const fs = await import('fs').then(m => m.promises);
+    const path = await import('path');
+
+    const logsDir = path.join(process.cwd(), 'logs', 'learning');
+
+    try {
+      // 确保目录存在
+      await fs.mkdir(logsDir, { recursive: true });
+
+      // 生成文件名
+      const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const timeStr = new Date().toISOString().slice(11, 19).replace(/:/g, '');
+      const reportFilename = filename || `learning_report_${dateStr}_${timeStr}.json`;
+      const filePath = path.join(logsDir, reportFilename);
+
+      // 写入文件
+      await fs.writeFile(filePath, JSON.stringify(logData, null, 2), 'utf-8');
+      console.log(`[AIEvolution] 📄 学习报告已保存: ${filePath}`);
+
+      // 同时保存最新报告的副本
+      const latestPath = path.join(logsDir, 'latest_report.json');
+      await fs.writeFile(latestPath, JSON.stringify(logData, null, 2), 'utf-8');
+    } catch (error) {
+      console.error('[AIEvolution] ❌ 保存报告失败:', error);
+      // 回退到控制台输出
+      console.log('[AIEvolution] 📄 学习报告:', JSON.stringify(logData, null, 2));
+    }
+  }
+
+  /**
+   * 加载最新的学习报告
+   */
+  async loadLatestReport(): Promise<LearningReport | null> {
+    try {
+      const fs = await import('fs').then(m => m.promises);
+      const path = await import('path');
+
+      const latestPath = path.join(process.cwd(), 'logs', 'learning', 'latest_report.json');
+      const content = await fs.readFile(latestPath, 'utf-8');
+      const data = JSON.parse(content);
+
+      console.log(`[AIEvolution] 📖 已加载最新学习报告`);
+      return data as LearningReport;
+    } catch {
+      console.log('[AIEvolution] ℹ️ 未找到历史学习报告');
+      return null;
+    }
   }
 }
 

@@ -372,6 +372,37 @@ export class OKXClient {
   }
 
   /**
+   * 获取 K 线数据
+   * @param instId 交易对，如 'DOGE-USDT-SWAP'
+   * @param bar K 线周期，如 '1m', '5m', '15m', '1H', '4H', '1D'
+   * @param limit 数量，最大 300
+   * @returns K 线数组 [[ts, open, high, low, close, vol, volCcy], ...]
+   */
+  async getCandles(instId: string, bar: string = '1m', limit: number = 30): Promise<any[]> {
+    if (!this.isAvailable()) {
+      throw new Error('OKX 客户端未初始化');
+    }
+
+    try {
+      const response = await this.request('GET', '/api/v5/market/candles', {
+        instId,
+        bar,
+        limit: String(limit),
+      });
+
+      if (response.code !== '0' || !response.data) {
+        throw new Error(`获取 K 线失败: ${response.msg || '未知错误'}`);
+      }
+
+      console.log(`[OKX] 📊 获取 ${instId} ${bar} K 线: ${response.data.length} 根`);
+      return response.data;
+    } catch (error) {
+      console.error(`[OKX] ❌ 获取 K 线失败:`, error);
+      throw error;
+    }
+  }
+
+  /**
    * 获取多个币种价格
    */
   async getAllMarketPrices(): Promise<Record<Coin, number> | null> {
@@ -504,6 +535,38 @@ export class OKXClient {
         );
       }
 
+      // 🔧 v1.4 安全检查：最大合约张数限制（防止意外大单）
+      const MAX_CONTRACTS = 50; // DOGE: 50张 = 500 DOGE ≈ $65
+      if (roundedContracts > MAX_CONTRACTS) {
+        console.error(`[OKX] 🚨 安全警告：计算出的合约数 ${roundedContracts} 超过上限 ${MAX_CONTRACTS}！`);
+        console.error(`[OKX]    请求金额: $${size}, 价格: $${currentPrice}, 币数: ${coinAmount}`);
+        console.error(`[OKX]    这可能是计算 bug，拒绝下单！`);
+        throw new Error(`安全限制：合约数 ${roundedContracts} 超过上限 ${MAX_CONTRACTS}（约 $${(MAX_CONTRACTS * ctVal * currentPrice).toFixed(2)}）`);
+      }
+
+      // 🔧 v1.4 安全检查：名义价值验证
+      const notionalValue = roundedContracts * ctVal * currentPrice;
+      const MAX_NOTIONAL_USD = 100; // 最大 $100
+      if (notionalValue > MAX_NOTIONAL_USD) {
+        console.error(`[OKX] 🚨 安全警告：名义价值 $${notionalValue.toFixed(2)} 超过上限 $${MAX_NOTIONAL_USD}！`);
+        throw new Error(`安全限制：名义价值 $${notionalValue.toFixed(2)} 超过上限 $${MAX_NOTIONAL_USD}`);
+      }
+
+      console.log(`[OKX] ✅ 安全检查通过: ${roundedContracts} 张, 名义价值 $${notionalValue.toFixed(2)}`);
+
+      // 🔧 v1.4: 预下单验证（显示将要下的单）
+      console.log(`[OKX] 📝 预下单确认:`);
+      console.log(`    合约: ${symbol}`);
+      console.log(`    方向: ${side}`);
+      console.log(`    张数: ${roundedContracts}`);
+      console.log(`    币数: ${roundedContracts * ctVal} DOGE`);
+      console.log(`    名义价值: $${notionalValue.toFixed(2)}`);
+      console.log(`    预估保证金: $${(notionalValue / leverage).toFixed(2)} (${leverage}x 杠杆)`);
+      console.log(`    ---`);
+      console.log(`    输入金额: $${size}`);
+      console.log(`    当前价格: $${currentPrice}`);
+      console.log(`    合约面值: ${ctVal} DOGE/张`);
+
       // 7. 先设置杠杆
       await this.setLeverage(coin, leverage);
 
@@ -599,6 +662,62 @@ export class OKXClient {
       return closeOrder;
     } catch (error) {
       console.error(`[OKX] ❌ ${coin} 平仓失败:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 部分平仓（期货合约）
+   * @param coin 币种
+   * @param percentage 平仓百分比 (0-100)
+   */
+  async partialClosePosition(coin: Coin, percentage: number) {
+    if (!this.isAvailable()) {
+      throw new Error('OKX 客户端未初始化');
+    }
+
+    if (percentage <= 0 || percentage > 100) {
+      throw new Error(`无效的平仓百分比: ${percentage}%`);
+    }
+
+    const symbol = COIN_TO_OKX_SYMBOL[coin];
+    console.log(`[OKX] 🔄 部分平仓: ${symbol} ${percentage}%`);
+
+    try {
+      // 获取当前持仓
+      const positions = await this.request('GET', '/api/v5/account/positions', { instId: symbol });
+      const position = positions.data?.[0];
+
+      if (!position || parseFloat(position.pos) === 0) {
+        console.log(`[OKX] ⚠️ ${coin} 无持仓需要平仓`);
+        return null;
+      }
+
+      const currentPos = Math.abs(parseFloat(position.pos));
+      const closeSize = Math.floor(currentPos * (percentage / 100)); // 向下取整
+
+      if (closeSize < 1) {
+        console.log(`[OKX] ⚠️ 平仓数量不足1张合约，跳过`);
+        return null;
+      }
+
+      const tdMode = position.mgnMode || 'isolated';
+      console.log(`[OKX] 📊 持仓: ${currentPos}张, 平仓: ${closeSize}张 (${percentage}%)`);
+
+      // 部分平仓订单
+      const closeOrder = await this.request('POST', '/api/v5/trade/order', {
+        instId: symbol,
+        tdMode: tdMode,
+        side: parseFloat(position.pos) > 0 ? 'sell' : 'buy',
+        ordType: 'market',
+        sz: closeSize.toString(),
+        reduceOnly: true,
+      });
+
+      console.log(`[OKX] ✅ ${symbol} 部分平仓成功 (${closeSize}张)`);
+      return closeOrder;
+    } catch (error) {
+      console.error(`[OKX] ❌ ${coin} 部分平仓失败:`, error);
       throw error;
     }
   }

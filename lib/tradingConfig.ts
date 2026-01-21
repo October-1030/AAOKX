@@ -75,13 +75,13 @@ export function calculateTradingLimits(balance: number): TradingLimits {
       },
     };
   } else {
-    // 大额账户：$200+
-    console.log('[TradingConfig] 💎 平衡模式（适中风险）');
+    // 大额账户：$200+（三方共识 v1.2 规则）
+    console.log('[TradingConfig] 💎 保守模式（三方共识 v1.2）');
     return {
       accountBalance: balance,
-      maxPositionSize: Math.min(balance * 0.15, 200), // ⚖️ 平衡设置：15%仓位
-      maxPositionPercent: 15,
-      maxLeverage: 5, // ⚖️ 平衡设置：5x杠杆（安全且有效）
+      maxPositionSize: Math.min(balance * 0.05, 50), // 🔒 三方共识：单笔 5%（$230 → $11.5）
+      maxPositionPercent: 5,
+      maxLeverage: 2, // 🔒 三方共识：固定 2x 杠杆
       enabledCoins: ['BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP'],
       minOrderSize: {
         BTC: 10,

@@ -131,6 +131,23 @@ export async function GET(request: Request) {
         stopTradingLoop();
         return NextResponse.json({ status: 'stopped' });
 
+      case 'reset_circuit_breaker':
+        // 🔄 重置熔断状态，恢复交易
+        const resetResult = engine.resetCircuitBreaker();
+        return NextResponse.json({
+          status: resetResult.success ? 'reset' : 'no_action',
+          message: resetResult.message,
+          safetyStatus: engine.getSafetyStatus(),
+        });
+
+      case 'safety_status':
+        // 📊 获取安全状态（熔断、每日亏损等）
+        return NextResponse.json({
+          safetyStatus: engine.getSafetyStatus(),
+          isHalted: engine.isTradingHalted(),
+          timestamp: Date.now(),
+        });
+
       case 'status':
         // ✅ 先确保市场数据已初始化，再更新价格
         const marketData = await getMarketData();

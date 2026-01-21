@@ -32,7 +32,7 @@ export const RISK_CONFIG = {
 
   // 波动率调整
   VOLATILITY_LOOKBACK: 20, // 计算20个周期的波动率
-  MAX_LEVERAGE_HIGH_VOL: 5, // 高波动时最大杠杆5x
+  MAX_LEVERAGE_HIGH_VOL: 2, // 🔒 三方共识：高波动时最大杠杆 2x
 
   // 集中度限制
   MAX_SINGLE_POSITION_PERCENT: 20, // 单笔交易最大占比20%

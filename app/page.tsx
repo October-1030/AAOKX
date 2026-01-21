@@ -72,25 +72,32 @@ export default function TradingBot() {
     };
   }, []);
 
-  // 倒计时更新
+  // 实时交易状态轮询（检查后端状态）
+  // 🔧 FIX: 不再自动关闭，只同步状态显示
   useEffect(() => {
-    if (isRunning && nextExecutionTime > 0) {
-      countdownIntervalRef.current = setInterval(() => {
-        const remaining = Math.max(0, nextExecutionTime - Date.now());
-        setCountdown(remaining);
+    if (!isRunning) return;
 
-        if (remaining <= 0) {
-          setNextExecutionTime(Date.now() + 3 * 60 * 1000);
-        }
-      }, 1000);
+    // 每 30 秒检查一次后端状态
+    const statusCheckInterval = setInterval(async () => {
+      try {
+        const response = await fetch('/api/realtime-trading?action=status');
+        const result = await response.json();
 
-      return () => {
-        if (countdownIntervalRef.current) {
-          clearInterval(countdownIntervalRef.current);
+        if (result.success && !result.isRunning) {
+          // 🔧 FIX: 不自动关闭，只记录日志
+          // 后端可能正在自动恢复中（热重载后 3 秒内会自动恢复）
+          console.log('[Frontend] ⏳ 后端暂时未运行，等待自动恢复...');
+          // 不再调用 setIsRunning(false) 和 clearAutoTradingState()
         }
-      };
-    }
-  }, [isRunning, nextExecutionTime]);
+      } catch (e) {
+        // 静默处理
+      }
+    }, 30000);
+
+    return () => {
+      clearInterval(statusCheckInterval);
+    };
+  }, [isRunning]);
 
   // 获取OKX账户数据
   const { data: okxAccount, error, mutate } = useSWR('/api/okx-account', fetcher, {
@@ -146,44 +153,46 @@ export default function TradingBot() {
     ? ((totalEquity - INITIAL_CAPITAL) / INITIAL_CAPITAL) * 100
     : 0;
 
-  // 静默执行一次交易（用于定时器）
+  // 静默执行一次分析（遗留代码 - 新系统由 Sentinel 自动处理）
+  // 注意：新的 Sentinel v1.4 系统是事件驱动的，不需要前端定时器
   const executeOnceSilent = async () => {
     const timestamp = Date.now();
-    console.log('[Frontend] ⏰ 定时器触发 - 执行交易周期...');
+    console.log('[Frontend] ⏰ 触发 Strategist 分析...');
 
     try {
-      const response = await fetch('/api/trading', {
+      // 使用新的 Sentinel 系统 API
+      const response = await fetch('/api/realtime-trading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'execute_cycle' }),
+        body: JSON.stringify({ action: 'trigger_analysis' }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        console.log('[Frontend] ✅ AI分析完成:', result);
+        console.log('[Frontend] ✅ Strategist 分析完成:', result);
 
         // 添加执行日志
         setExecutionLogs(prev => [
           {
             timestamp,
             status: 'success',
-            message: result.message || 'AI分析完成',
-            decisions: result.data?.decisions?.length || 0,
+            message: result.status?.marketContext || 'Strategist 分析完成',
+            decisions: 0, // Sentinel 系统是事件驱动的
           },
           ...prev.slice(0, 9) // 只保留最近10条
         ]);
 
         mutate(); // 刷新账户数据
       } else {
-        console.error('[Frontend] ❌ AI分析失败:', result.error || result.message);
+        console.error('[Frontend] ❌ Strategist 分析失败:', result.error || result.message);
 
         // 添加错误日志
         setExecutionLogs(prev => [
           {
             timestamp,
             status: 'error',
-            message: result.error || result.message || 'AI分析失败',
+            message: result.error || result.message || 'Strategist 分析失败',
           },
           ...prev.slice(0, 9)
         ]);
@@ -203,53 +212,55 @@ export default function TradingBot() {
     }
   };
 
-  // 页面加载时恢复自动交易状态
+  // 页面加载时恢复实时交易状态
   useEffect(() => {
     if (hasRestoredState.current) return;
     hasRestoredState.current = true;
 
-    try {
-      const raw = localStorage.getItem(AUTO_TRADING_STATE_KEY);
-      if (raw) {
-        const state: AutoTradingState = JSON.parse(raw);
+    // 检查后端实时交易状态
+    const checkRealtimeTradingStatus = async () => {
+      try {
+        const response = await fetch('/api/realtime-trading?action=status');
+        const result = await response.json();
 
-        // 检查状态是否有效（24小时内启动的）
-        const isRecent = Date.now() - state.startedAt < 24 * 60 * 60 * 1000;
-
-        if (state.isRunning && isRecent) {
-          console.log('[Frontend] 🔄 恢复自动交易状态...');
-
-          // 计算下次执行时间
-          let nextTime = state.nextExecutionTime;
-
-          // 如果下次执行时间已过，立即执行并设置新的时间
-          if (nextTime <= Date.now()) {
-            console.log('[Frontend] ⏰ 上次执行时间已过，立即执行...');
-            executeOnceSilent();
-            nextTime = Date.now() + 3 * 60 * 1000;
-          }
-
-          setNextExecutionTime(nextTime);
+        if (result.success && result.isRunning) {
+          console.log('[Frontend] 🔄 检测到实时交易系统正在运行');
           setIsRunning(true);
+          console.log('[Frontend] ✅ 实时交易状态已同步');
+          console.log(`[Frontend] 📊 当前市场状态: ${result.marketContext}`);
+        } else {
+          // 检查 localStorage 是否有保存的状态
+          const raw = localStorage.getItem(AUTO_TRADING_STATE_KEY);
+          if (raw) {
+            const state: AutoTradingState = JSON.parse(raw);
+            const isRecent = Date.now() - state.startedAt < 24 * 60 * 60 * 1000;
 
-          // 重新设置定时器
-          tradingIntervalRef.current = setInterval(() => {
-            executeOnceSilent();
-            const newNextTime = Date.now() + 3 * 60 * 1000;
-            setNextExecutionTime(newNextTime);
-            saveAutoTradingState(true, newNextTime);
-          }, 3 * 60 * 1000);
+            if (state.isRunning && isRecent) {
+              console.log('[Frontend] 🔄 尝试恢复实时交易状态...');
+              // 尝试重新启动实时交易
+              const startResponse = await fetch('/api/realtime-trading', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'start' }),
+              });
+              const startResult = await startResponse.json();
 
-          console.log('[Frontend] ✅ 自动交易状态已恢复');
-        } else if (!isRecent) {
-          // 状态太旧，清除它
-          console.log('[Frontend] 🗑️ 清除过期的自动交易状态');
-          clearAutoTradingState();
+              if (startResult.success) {
+                setIsRunning(true);
+                console.log('[Frontend] ✅ 实时交易已自动恢复');
+              }
+            } else if (!isRecent) {
+              console.log('[Frontend] 🗑️ 清除过期的自动交易状态');
+              clearAutoTradingState();
+            }
+          }
         }
+      } catch (e) {
+        console.error('[Frontend] 无法检查实时交易状态:', e);
       }
-    } catch (e) {
-      console.error('[Frontend] Failed to restore auto trading state:', e);
-    }
+    };
+
+    checkRealtimeTradingStatus();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -317,7 +328,7 @@ export default function TradingBot() {
     }
   };
 
-  // 启动自动交易
+  // 启动自动交易（实时监听模式）
   const startTrading = async () => {
     if (tradingEquity <= 0) {
       alert('⚠️ 交易账户余额为0，请先划转资金');
@@ -325,66 +336,84 @@ export default function TradingBot() {
     }
 
     const confirmed = confirm(
-      `🤖 启动自动交易？\n\n` +
-      `AI将每3分钟自动分析市场并执行交易\n` +
+      `🤖 启动实时交易？\n\n` +
+      `系统将实时监听 Flow-Radar 信号并自动执行交易\n` +
+      `- Strategist 每15分钟更新市场状态\n` +
+      `- Sentinel 实时监听信号（三道闸机制）\n` +
       `交易账户余额：$${tradingEquity.toFixed(2)}\n\n` +
       `确定启动吗？`
     );
 
     if (!confirmed) return;
 
-    // 清除旧的定时器（如果有）
-    if (tradingIntervalRef.current) {
-      clearInterval(tradingIntervalRef.current);
+    try {
+      console.log('[Frontend] 🚀 启动实时交易系统...');
+
+      const response = await fetch('/api/realtime-trading', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start' }),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        setIsRunning(true);
+        saveAutoTradingState(true, Date.now());
+        alert(`✅ 实时交易已启动！\n\n${result.message}\n\n系统将实时响应 Flow-Radar 信号`);
+        console.log('[Frontend] ✅ 实时交易已启动:', result);
+      } else {
+        alert('❌ 启动失败\n\n' + (result.error || result.message));
+        console.error('[Frontend] 启动失败:', result);
+      }
+    } catch (error) {
+      console.error('[Frontend] 启动异常:', error);
+      alert('❌ 启动失败: ' + (error as Error).message);
     }
-
-    // 立即执行一次
-    console.log('[Frontend] 🚀 启动自动交易，立即执行第一次分析...');
-    await executeOnceSilent();
-
-    // 设置下次执行时间为3分钟后
-    const nextTime = Date.now() + 3 * 60 * 1000;
-    setNextExecutionTime(nextTime);
-
-    // 保存状态到 localStorage
-    saveAutoTradingState(true, nextTime);
-
-    // 设置定时器（每3分钟执行一次）
-    tradingIntervalRef.current = setInterval(() => {
-      executeOnceSilent();
-      const newNextTime = Date.now() + 3 * 60 * 1000;
-      setNextExecutionTime(newNextTime);
-      saveAutoTradingState(true, newNextTime); // 每次执行后更新状态
-    }, 3 * 60 * 1000); // 3分钟
-
-    setIsRunning(true);
-    alert('✅ 自动交易已启动！\n\nAI将每3分钟执行一次交易分析\n刷新页面后会自动恢复运行状态');
-    console.log('[Frontend] ✅ 自动交易已启动，定时器ID:', tradingIntervalRef.current);
   };
 
-  // 停止自动交易
-  const stopTrading = () => {
-    if (tradingIntervalRef.current) {
-      clearInterval(tradingIntervalRef.current);
-      tradingIntervalRef.current = null;
-      console.log('[Frontend] ⏸️ 自动交易已停止，定时器已清除');
+  // 停止自动交易（实时监听模式）
+  const stopTrading = async () => {
+    try {
+      console.log('[Frontend] 🛑 停止实时交易系统...');
+
+      const response = await fetch('/api/realtime-trading', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'stop' }),
+      });
+
+      const result = await response.json();
+
+      // 清理前端状态
+      if (tradingIntervalRef.current) {
+        clearInterval(tradingIntervalRef.current);
+        tradingIntervalRef.current = null;
+      }
+
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+        countdownIntervalRef.current = null;
+      }
+
+      clearAutoTradingState();
+      setIsRunning(false);
+      setCountdown(0);
+      setNextExecutionTime(0);
+
+      if (result.success) {
+        alert(`⏸️ 实时交易已停止\n\n${result.message}`);
+        console.log('[Frontend] ✅ 实时交易已停止:', result);
+      } else {
+        alert('⚠️ 停止请求返回警告\n\n' + (result.error || result.message));
+      }
+    } catch (error) {
+      console.error('[Frontend] 停止异常:', error);
+      alert('❌ 停止失败: ' + (error as Error).message);
     }
-
-    if (countdownIntervalRef.current) {
-      clearInterval(countdownIntervalRef.current);
-      countdownIntervalRef.current = null;
-    }
-
-    // 清除 localStorage 状态
-    clearAutoTradingState();
-
-    setIsRunning(false);
-    setCountdown(0);
-    setNextExecutionTime(0);
-    alert('⏸️ 自动交易已停止');
   };
 
-  // 执行一次交易
+  // 手动触发 Strategist 分析（更新市场状态）
   const executeOnce = async () => {
     if (tradingEquity <= 0) {
       alert('⚠️ 交易账户余额为0，请先划转资金');
@@ -393,20 +422,24 @@ export default function TradingBot() {
 
     setIsExecuting(true);
     try {
-      const response = await fetch('/api/trading', {
+      // 使用新的 Sentinel 系统 API
+      const response = await fetch('/api/realtime-trading', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'execute_cycle' }),
+        body: JSON.stringify({ action: 'trigger_analysis' }),
       });
 
       const result = await response.json();
 
       if (result.success) {
-        alert('✅ 交易执行完成！\n\n查看控制台获取详细信息');
-        console.log('交易结果:', result);
+        alert('✅ 市场分析已更新！\n\n' +
+          '- Strategist 已刷新市场状态\n' +
+          '- 交易决策由 Sentinel 根据信号自动执行\n\n' +
+          `当前状态: ${result.status?.marketContext || '获取中...'}`);
+        console.log('[Frontend] Strategist 分析结果:', result);
         mutate(); // 刷新账户数据
       } else {
-        alert('❌ 交易执行失败\n\n' + (result.error || result.message));
+        alert('❌ 分析失败\n\n' + (result.error || result.message));
       }
     } catch (error) {
       console.error('执行失败:', error);
@@ -440,10 +473,12 @@ export default function TradingBot() {
             </div>
 
             <div className="flex items-center gap-3">
+              {/* 🔧 FIX: 使用 okxAccount?.success 判断连接状态，而不是 error */}
+              {/* 即使有 error，只要最近有成功的数据就显示 Connected */}
               <div className={`px-3 py-1 rounded-full text-sm ${
-                error ? 'bg-red-900 text-red-300' : 'bg-green-900 text-green-300'
+                okxAccount?.success ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'
               }`}>
-                {error ? '⚠️ Disconnected' : '✅ Connected'}
+                {okxAccount?.success ? '✅ Connected' : '⚠️ Disconnected'}
               </div>
 
               <div className={`px-3 py-1 rounded-full text-sm ${
@@ -493,8 +528,9 @@ export default function TradingBot() {
                       ? 'bg-blue-400 cursor-not-allowed'
                       : 'bg-blue-600 hover:bg-blue-700'
                   } px-6 py-2 rounded-lg font-semibold`}
+                  title="手动刷新 Strategist 市场分析（交易由信号自动触发）"
                 >
-                  {isExecuting ? '⏳ Executing...' : '🔄 Execute Once'}
+                  {isExecuting ? '⏳ 分析中...' : '📊 刷新分析'}
                 </button>
               )}
 
@@ -604,6 +640,47 @@ export default function TradingBot() {
                   const avgPrice = parseFloat(pos.avgPx || '0');
                   const unrealizedPnL = parseFloat(pos.upl || '0');
                   const uplRatio = parseFloat(pos.uplRatio || '0') * 100;
+                  const margin = parseFloat(pos.margin || pos.imr || '0');
+                  const notionalUsd = parseFloat(pos.notionalUsd || '0');
+
+                  // 从合约 ID 提取币种名称
+                  const instId = pos.instId || '';
+                  const coinName = instId.split('-')[0] || 'UNKNOWN';
+
+                  // 获取当前市场价格
+                  const currentPrice = marketPrices[coinName] || 0;
+
+                  // 合约乘数（每张合约的币数量）：DOGE=10, BTC=0.01, ETH=0.1
+                  const contractMultiplier: Record<string, number> = {
+                    'DOGE': 10,
+                    'BTC': 0.01,
+                    'ETH': 0.1,
+                    'SOL': 1,
+                  };
+                  const multiplier = contractMultiplier[coinName] || 1;
+
+                  // 🔧 FIX: 从 notionalUsd 反推正确的数量（OKX pos 字段可能有格式问题）
+                  // 优先使用 notionalUsd，它是最可靠的
+                  let coinAmount: number;
+                  let contractCount: number;
+
+                  if (notionalUsd > 0 && currentPrice > 0) {
+                    // 从名义价值反推币数量
+                    coinAmount = notionalUsd / currentPrice;
+                    contractCount = coinAmount / multiplier;
+                  } else {
+                    // 备用：使用 pos 字段（可能不准确）
+                    contractCount = Math.abs(size);
+                    coinAmount = contractCount * multiplier;
+                  }
+
+                  // 名义价值（直接使用 OKX 返回的值）
+                  const calculatedNotional = notionalUsd > 0
+                    ? notionalUsd
+                    : coinAmount * (currentPrice || avgPrice);
+
+                  // 入场价值
+                  const entryValue = coinAmount * avgPrice;
 
                   return (
                     <div
@@ -615,24 +692,53 @@ export default function TradingBot() {
                       }`}
                     >
                       <div className="flex justify-between items-start">
-                        <div>
+                        <div className="flex-1">
                           <div className="text-lg font-bold">
                             {pos.instId} {isLong ? '🟢 LONG' : '🔴 SHORT'} {leverage}x
                           </div>
-                          <div className="text-sm text-gray-400 mt-1">
-                            Size: {Math.abs(size).toFixed(4)} | Avg Price: ${avgPrice.toFixed(2)}
+
+                          {/* 详细持仓信息 */}
+                          <div className="mt-3 grid grid-cols-2 gap-x-8 gap-y-1 text-sm">
+                            <div className="text-gray-400">
+                              合约数量: <span className="text-white font-medium">{contractCount.toFixed(0)} 张</span>
+                            </div>
+                            <div className="text-gray-400">
+                              币种数量: <span className="text-white font-medium">{coinAmount.toFixed(2)} {coinName}</span>
+                            </div>
+                            <div className="text-gray-400">
+                              入场均价: <span className="text-white font-medium">${avgPrice.toFixed(4)}</span>
+                            </div>
+                            <div className="text-gray-400">
+                              当前价格: <span className="text-white font-medium">${currentPrice ? currentPrice.toFixed(4) : 'N/A'}</span>
+                            </div>
+                            <div className="text-gray-400">
+                              入场价值: <span className="text-yellow-300 font-medium">${entryValue.toFixed(2)}</span>
+                            </div>
+                            <div className="text-gray-400">
+                              当前价值: <span className="text-blue-300 font-medium">${calculatedNotional.toFixed(2)}</span>
+                            </div>
+                            <div className="text-gray-400">
+                              占用保证金: <span className="text-purple-300 font-medium">${margin.toFixed(2)}</span>
+                            </div>
+                            <div className="text-gray-400">
+                              实际杠杆: <span className="text-white font-medium">{(calculatedNotional / (margin || 1)).toFixed(1)}x</span>
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <div className={`text-xl font-bold ${
+
+                        <div className="text-right ml-4">
+                          <div className={`text-2xl font-bold ${
                             unrealizedPnL >= 0 ? 'text-green-400' : 'text-red-400'
                           }`}>
                             {unrealizedPnL >= 0 ? '+' : ''}${unrealizedPnL.toFixed(2)}
                           </div>
-                          <div className={`text-sm ${
+                          <div className={`text-lg ${
                             uplRatio >= 0 ? 'text-green-400' : 'text-red-400'
                           }`}>
-                            P/L Ratio: {uplRatio.toFixed(2)}%
+                            {uplRatio >= 0 ? '+' : ''}{uplRatio.toFixed(2)}%
+                          </div>
+                          <div className="text-xs text-gray-500 mt-2">
+                            未实现盈亏
                           </div>
                         </div>
                       </div>

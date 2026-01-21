@@ -4,6 +4,7 @@
 import { AccountStatus, MarketData, TradingDecision, TradeAction, CompletedTrade, Coin, TechnicalIndicators } from '@/types/trading';
 import { getAIEvolutionEngine, LearningReport } from './aiEvolutionEngine';
 import { getPositionDurationTracker } from './positionDurationTracker';
+import { getFlowRadarSignals, getFlowRadarStatus, getFlowRadarRiskControl } from './flowRadar';
 
 /**
  * 生成 USER_PROMPT（数据输入层）- 完全匹配 nof1.ai 格式
@@ -740,6 +741,97 @@ export async function generateEnhancedPromptWithLearning(
         console.log(`[EnhancedPrompt] 🚨 ${needsAttention.length} 个持仓需要关注！`);
       }
     }
+  }
+
+  // 2.5 添加 Flow-Radar 信号（冰山单 + K神战法）
+  try {
+    const flowRadarStatus = getFlowRadarStatus();
+    const flowRadarSignals = await getFlowRadarSignals();
+    const riskControl = getFlowRadarRiskControl();
+
+    if (flowRadarStatus.available && flowRadarSignals) {
+      // 生成信号摘要 JSON
+      const signalSummaryJson = JSON.stringify(flowRadarSignals, null, 2);
+
+      // 获取风控状态
+      const riskStatus = riskControl.getStatusSummary();
+
+      // 生成交易建议
+      const tradeAdvice = riskControl.generateTradeAdvice(flowRadarSignals);
+
+      prompt += `
+---
+
+=== FLOW-RADAR REAL-TIME SIGNALS (冰山单 + K神战法) ===
+
+[FLOW_RADAR_STATUS]
+System Status: ${flowRadarStatus.description}
+Can Open Position: ${flowRadarStatus.canOpenPosition ? 'YES ✅' : 'NO ❌'}
+Time Since Last Signal: ${flowRadarStatus.timeSinceLastSignal}s
+Signal Count: ${flowRadarStatus.signalCount}
+
+[FLOW_RADAR_RISK_CONTROL]
+Daily Drawdown: ${riskStatus.dailyDrawdown}
+Daily Halted: ${riskStatus.isDailyHalted ? 'YES ⚠️' : 'NO'}
+Consecutive Losses: ${riskStatus.consecutiveLosses}
+Loss Halted: ${riskStatus.isConsecutiveLossHalted ? 'YES ⚠️' : 'NO'}
+Current Leverage: ${riskStatus.currentLeverage}x
+Total Notional: ${riskStatus.totalNotional} / ${riskStatus.maxNotional}
+
+[FLOW_RADAR_SIGNALS]
+${signalSummaryJson}
+
+[FLOW_RADAR_TRADE_ADVICE]
+Recommended Action: ${tradeAdvice.action}
+Reason: ${tradeAdvice.reason}
+Suggested Notional: $${tradeAdvice.notional.toFixed(2)}
+Suggested Leverage: ${tradeAdvice.leverage}x
+Confidence: ${tradeAdvice.confidence}%
+
+[FLOW_RADAR_INSTRUCTIONS]
+- 以上为 Flow-Radar 实时检测的冰山单和 K神战法信号
+- 信号优先级：冰山CONFIRMED+K神同向 > 冰山CONFIRMED > K神单独 > 冰山DETECTED
+- 如果 consensus.conflict=true，默认 NO_TRADE（多空信号冲突）
+- 如果 trend_congruence=true，可适当增加仓位（冰山K神共振）
+- 如果信号为空或系统处于 PAUSED 状态，仅依赖技术指标决策
+- 风控规则：日亏损 >5% 熔断，连亏 ≥3 次暂停 2 小时并降杠杆
+- 最小置信度：60%，低于此值不开仓
+
+`;
+
+      console.log(`[EnhancedPrompt] 🌊 已注入 Flow-Radar 信号（${flowRadarSignals.signals.length} 个信号，建议: ${tradeAdvice.action}）`);
+
+      // 如果有冲突或风控熔断，显示警告
+      if (flowRadarSignals.consensus.conflict) {
+        console.log(`[EnhancedPrompt] ⚠️ Flow-Radar 检测到多空信号冲突！建议 NO_TRADE`);
+      }
+      if (riskStatus.isDailyHalted || riskStatus.isConsecutiveLossHalted) {
+        console.log(`[EnhancedPrompt] 🛑 风控熔断激活！暂停开仓`);
+      }
+    } else {
+      // Flow-Radar 不可用
+      prompt += `
+---
+
+=== FLOW-RADAR STATUS ===
+
+Flow-Radar 信号系统当前不可用: ${flowRadarStatus.description}
+请仅依赖技术指标进行决策。
+
+`;
+      console.log(`[EnhancedPrompt] ⚠️ Flow-Radar 不可用: ${flowRadarStatus.description}`);
+    }
+  } catch (error) {
+    console.error(`[EnhancedPrompt] ❌ Flow-Radar 信号注入失败:`, error);
+    // 失败时不中断，继续使用技术指标
+    prompt += `
+---
+
+=== FLOW-RADAR STATUS ===
+
+Flow-Radar 信号系统出现错误，请仅依赖技术指标进行决策。
+
+`;
   }
 
   // 3. 如果有足够的历史交易，添加AI学习内容

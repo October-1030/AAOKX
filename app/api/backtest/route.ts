@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       endDate, // ISO string
       interval = '15m', // '1m' | '5m' | '15m' | '1h' | '4h' | '1d'
       initialBalance = 1000,
-      maxLeverage = 5,
+      maxLeverage = 2, // 🔒 三方共识 v1.2：默认 2x
       tradingInterval = 180, // 交易周期（秒）
       csvData, // CSV文件内容（如果dataSource是csv）
     } = body;

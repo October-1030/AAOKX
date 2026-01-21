@@ -79,38 +79,51 @@ export async function callDeepSeek(
     },
   ];
 
-  try {
-    const provider = isOpenRouter ? 'OpenRouter' : 'DeepSeek';
-    console.log(`[${modelName}] 📤 调用 ${provider} API...`);
-    console.log(`[${modelName}] 📊 提示词长度: ${systemPrompt.length + userPrompt.length} 字符`);
+  // 🔄 重试配置
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 5000;
+  const TIMEOUT_MS = 60000; // 60秒超时
 
-    // OpenRouter 使用的模型名称
-    const modelId = isOpenRouter
-      ? 'deepseek/deepseek-chat' // OpenRouter 的 DeepSeek 模型
-      : 'deepseek-chat'; // 直接 DeepSeek API
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const provider = isOpenRouter ? 'OpenRouter' : 'DeepSeek';
+      console.log(`[${modelName}] 📤 调用 ${provider} API (尝试 ${attempt}/${MAX_RETRIES})...`);
+      console.log(`[${modelName}] 📊 提示词长度: ${systemPrompt.length + userPrompt.length} 字符`);
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    };
+      // OpenRouter 使用的模型名称
+      const modelId = isOpenRouter
+        ? 'deepseek/deepseek-chat' // OpenRouter 的 DeepSeek 模型
+        : 'deepseek-chat'; // 直接 DeepSeek API
 
-    // OpenRouter 特有的请求头
-    if (isOpenRouter) {
-      headers['HTTP-Referer'] = 'https://alpha-arena.com'; // 可选：用于 OpenRouter 统计
-      headers['X-Title'] = 'Alpha Arena Trading Bot'; // 可选：显示在 OpenRouter 面板
-    }
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      };
 
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        model: modelId,
-        messages,
-        temperature: 0.7,
-        max_tokens: 4096,
-        stream: false,
-      }),
-    });
+      // OpenRouter 特有的请求头
+      if (isOpenRouter) {
+        headers['HTTP-Referer'] = 'https://alpha-arena.com'; // 可选：用于 OpenRouter 统计
+        headers['X-Title'] = 'Alpha Arena Trading Bot'; // 可选：显示在 OpenRouter 面板
+      }
+
+      // 🔄 添加超时控制
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
+      const response = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          model: modelId,
+          messages,
+          temperature: 0.7,
+          max_tokens: 4096,
+          stream: false,
+        }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -145,19 +158,36 @@ export async function callDeepSeek(
     const usage = data.usage;
     const cost = calculateCost(usage.total_tokens);
 
-    console.log(`[${modelName}] ✅ API 调用成功`);
-    console.log(`[${modelName}] 📊 使用情况:`);
-    console.log(`   - 输入 Tokens: ${usage.prompt_tokens.toLocaleString()}`);
-    console.log(`   - 输出 Tokens: ${usage.completion_tokens.toLocaleString()}`);
-    console.log(`   - 总计 Tokens: ${usage.total_tokens.toLocaleString()}`);
-    console.log(`   - 本次成本: $${cost.toFixed(6)} 💰`);
-    console.log(`[${modelName}] 📝 响应长度: ${aiResponse.length} 字符\n`);
+      console.log(`[${modelName}] ✅ API 调用成功`);
+      console.log(`[${modelName}] 📊 使用情况:`);
+      console.log(`   - 输入 Tokens: ${usage.prompt_tokens.toLocaleString()}`);
+      console.log(`   - 输出 Tokens: ${usage.completion_tokens.toLocaleString()}`);
+      console.log(`   - 总计 Tokens: ${usage.total_tokens.toLocaleString()}`);
+      console.log(`   - 本次成本: $${cost.toFixed(6)} 💰`);
+      console.log(`[${modelName}] 📝 响应长度: ${aiResponse.length} 字符\n`);
 
-    return aiResponse;
-  } catch (error) {
-    console.error(`[${modelName}] ❌ 调用 DeepSeek 失败:`, error);
-    throw error;
+      return aiResponse;
+    } catch (error) {
+      const isTimeout = error instanceof Error && error.name === 'AbortError';
+      const errorMsg = isTimeout ? '请求超时' : (error instanceof Error ? error.message : String(error));
+
+      console.error(`[${modelName}] ❌ 调用 DeepSeek 失败 (尝试 ${attempt}/${MAX_RETRIES}): ${errorMsg}`);
+
+      // 如果是最后一次尝试，抛出错误
+      if (attempt === MAX_RETRIES) {
+        console.error(`[${modelName}] 🚨 已达到最大重试次数，放弃调用`);
+        throw new Error(`DeepSeek API 调用失败 (${MAX_RETRIES}次重试后): ${errorMsg}`);
+      }
+
+      // 等待后重试（指数退避）
+      const delay = RETRY_DELAY_MS * attempt;
+      console.log(`[${modelName}] 🔄 ${delay / 1000}秒后重试...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
+
+  // 这行代码不应该被执行到，但 TypeScript 需要返回值
+  throw new Error('DeepSeek API 调用失败: 未知错误');
 }
 
 /**

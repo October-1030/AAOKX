@@ -84,11 +84,11 @@ export class TripleRiskControl {
   private pauseReason: string = '';
 
   constructor(config?: Partial<RiskControlConfig>) {
-    // 默认配置（保守）
+    // 默认配置（三方共识 v1.2）
     this.config = {
-      maxPositionPercent: 5,       // 单仓最大5%
-      maxLeverage: 3,              // 最大3x杠杆
-      maxDailyLossPercent: 10,     // 日最大损失10%
+      maxPositionPercent: 5,       // 🔒 三方共识：单仓最大 5%
+      maxLeverage: 2,              // 🔒 三方共识：固定 2x 杠杆
+      maxDailyLossPercent: 5,      // 🔒 三方共识：日最大损失 5%
       stopTradingMinutes: 60,      // 暂停60分钟
       maxDrawdownPercent: 20,      // 最大回撤20%
       criticalStopMinutes: 240,    // 暂停4小时

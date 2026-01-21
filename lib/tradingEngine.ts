@@ -148,6 +148,7 @@ export class TradingEngineState {
   private dailyLossPaused: Map<string, boolean> = new Map(); // 每个模型的单日亏损暂停标志
   private lastDailyResetDate: string = ''; // 上次重置日期
   private dailyStartEquity: Map<string, number> = new Map(); // 每个模型的今日起始权益
+  private realTradingEnabled: boolean = false; // 真实交易模式开关
 
   constructor(models: AIModel[]) {
     for (const model of models) {
@@ -177,6 +178,21 @@ export class TradingEngineState {
       totalEquity: INITIAL_CAPITAL,
       positions: [],
     };
+  }
+
+  /**
+   * 启用/禁用真实交易模式
+   */
+  setRealTradingEnabled(enabled: boolean): void {
+    this.realTradingEnabled = enabled;
+    console.log(`[TradingEngine] 真实交易模式: ${enabled ? '已启用' : '已禁用'}`);
+  }
+
+  /**
+   * 检查是否启用真实交易模式
+   */
+  isRealTradingEnabled(): boolean {
+    return this.realTradingEnabled;
   }
 
   /**
@@ -303,6 +319,56 @@ export class TradingEngineState {
     }
 
     return false;
+  }
+
+  /**
+   * 🛡️ 重置熔断状态（手动恢复交易）
+   * 警告：这会清除所有安全保护，请谨慎使用！
+   */
+  resetCircuitBreaker(): { success: boolean; message: string } {
+    if (!this.tradingHalted) {
+      return { success: false, message: '熔断未触发，无需重置' };
+    }
+
+    console.log('\n' + '='.repeat(60));
+    console.log('🔄 手动重置熔断状态');
+    console.log('='.repeat(60));
+
+    // 重置熔断标志
+    this.tradingHalted = false;
+
+    // 重置所有模型的每日追踪
+    for (const [modelName, state] of this.modelStates) {
+      this.dailyLossPaused.set(modelName, false);
+      const currentEquity = this.calculateTotalEquity(state.account);
+      this.dailyStartEquity.set(modelName, currentEquity);
+      console.log(`✅ ${state.model.displayName} 已重置，新起始权益: $${currentEquity.toFixed(2)}`);
+    }
+
+    // 更新日期
+    this.lastDailyResetDate = new Date().toISOString().split('T')[0];
+
+    console.log('✅ 熔断已重置，交易系统恢复运行');
+    console.log('⚠️  警告：请确保已了解风险后再继续交易');
+    console.log('='.repeat(60) + '\n');
+
+    // 📡 发出熔断重置事件
+    this.eventBus.emitSync({
+      type: TradingEventType.CIRCUIT_BREAKER_TRIGGERED,
+      timestamp: Date.now(),
+      modelName: 'SYSTEM',
+      reason: 'Manual reset - circuit breaker cleared',
+      totalLossPercent: 0,
+    });
+
+    return { success: true, message: '熔断已重置，交易恢复' };
+  }
+
+  /**
+   * 🛡️ 检查是否处于熔断状态
+   */
+  isTradingHalted(): boolean {
+    return this.tradingHalted;
   }
 
   /**
@@ -456,8 +522,15 @@ export class TradingEngineState {
     // 🔍 调试：开始调用 AI
     console.log(`[TradingEngine] 🔍 正在调用 ${model.displayName} API...`);
 
-    // 调用AI模型
-    const rawResponse = await model.callAPI(systemPrompt, userPrompt);
+    // 调用AI模型（带错误处理）
+    let rawResponse: string;
+    try {
+      rawResponse = await model.callAPI(systemPrompt, userPrompt);
+    } catch (apiError) {
+      console.error(`[TradingEngine] ❌ AI API 调用失败，本轮跳过交易:`, apiError);
+      // AI 调用失败时不抛出异常，而是跳过本轮交易
+      return;
+    }
 
     // 🔍 调试：AI 响应长度
     console.log(`[TradingEngine] 🔍 ${model.displayName} 响应长度: ${rawResponse.length} 字符`);
@@ -465,7 +538,16 @@ export class TradingEngineState {
     // 🔍 调试：打印 AI 原始响应（用于诊断）
     console.log(`[TradingEngine] 📝 AI 原始响应:\n${rawResponse}\n`);
 
-    const { chainOfThought, decisions } = parseNOF1Response(rawResponse);
+    let chainOfThought: string;
+    let decisions: TradingDecision[];
+    try {
+      const parsed = parseNOF1Response(rawResponse);
+      chainOfThought = parsed.chainOfThought;
+      decisions = parsed.decisions;
+    } catch (parseError) {
+      console.error(`[TradingEngine] ❌ AI 响应解析失败，本轮跳过交易:`, parseError);
+      return;
+    }
 
     // 🔍 调试：打印思考过程
     console.log(`[TradingEngine] 💭 AI 思考过程: ${chainOfThought.substring(0, 500)}...`);
@@ -886,21 +968,23 @@ export class TradingEngineState {
       // ✅ 浮盈 +50%：平仓 30%
       if (pnlPercent >= 50 && !position.partialExitsDone!.includes(50)) {
         console.log(`[SmartProfit] 🎯 ${position.coin} 浮盈 +${pnlPercent.toFixed(1)}% - 分批止盈 30%`);
-
-        // 注意：nof1.ai 规则禁止部分平仓，这里我们记录触发但不执行
-        // 实际应用中，可以修改为全平仓或者在真实交易中实现部分平仓
         position.partialExitsDone!.push(50);
 
-        // TODO: 如果交易所支持部分平仓，在这里实现
-        // 暂时只记录日志
-        console.log(`[SmartProfit] ⚠️ nof1.ai 规则限制：无法部分平仓，记录触发点`);
+        // 执行真实交易所部分平仓
+        this.executePartialClose(position.coin, 30).catch(err => {
+          console.log(`[SmartProfit] ⚠️ 部分平仓执行失败: ${err.message}`);
+        });
       }
 
       // ✅ 浮盈 +100%：平仓 50%
       if (pnlPercent >= 100 && !position.partialExitsDone!.includes(100)) {
         console.log(`[SmartProfit] 🎯 ${position.coin} 浮盈 +${pnlPercent.toFixed(1)}% - 分批止盈 50%`);
         position.partialExitsDone!.push(100);
-        console.log(`[SmartProfit] ⚠️ nof1.ai 规则限制：无法部分平仓，记录触发点`);
+
+        // 执行真实交易所部分平仓（平掉剩余的50%，即原始的35%）
+        this.executePartialClose(position.coin, 50).catch(err => {
+          console.log(`[SmartProfit] ⚠️ 部分平仓执行失败: ${err.message}`);
+        });
       }
 
       // ✅ 浮盈 +200%：平仓 70%（建议全平）
@@ -1127,6 +1211,34 @@ export class TradingEngineState {
     console.log(
       `${position.coin} ${position.side} closed: ${exitReason}, P&L: $${pnl.toFixed(2)}`
     );
+  }
+
+  /**
+   * 执行部分平仓（真实交易所）
+   * @param coin 币种
+   * @param percentage 平仓百分比
+   */
+  private async executePartialClose(coin: Coin, percentage: number): Promise<void> {
+    if (!this.realTradingEnabled) {
+      console.log(`[SmartProfit] 模拟模式：跳过真实部分平仓 ${coin} ${percentage}%`);
+      return;
+    }
+
+    try {
+      const { getOKXClient } = await import('./okxClient');
+      const okxClient = getOKXClient();
+
+      if (okxClient.isAvailable()) {
+        const result = await okxClient.partialClosePosition(coin, percentage);
+        if (result) {
+          console.log(`[SmartProfit] ✅ ${coin} 部分平仓成功: ${percentage}%`);
+        }
+      } else {
+        console.log(`[SmartProfit] ⚠️ OKX 客户端不可用，跳过部分平仓`);
+      }
+    } catch (error) {
+      console.error(`[SmartProfit] ❌ 部分平仓失败:`, error);
+    }
   }
 
   /**

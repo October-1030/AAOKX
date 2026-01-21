@@ -33,7 +33,7 @@ export const CONFIG = {
     MAX_TOTAL_LOSS_PERCENT: 15, // ✅ 降低至 -15% 触发熔断（更保守）
 
     // 单日亏损限制：单日亏损超过此百分比时，暂停当天交易
-    MAX_DAILY_LOSS_PERCENT: 3, // ✅ 降低至 -3% 暂停当天（更严格）
+    MAX_DAILY_LOSS_PERCENT: 5, // 🔒 三方共识 v1.2：-5% 暂停当天
 
     // 高风险交易审核：超过以下阈值需要确认（暂时禁用，设为false）
     HIGH_RISK_REVIEW_ENABLED: false,
